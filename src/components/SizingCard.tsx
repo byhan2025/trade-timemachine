@@ -53,6 +53,8 @@ export function SizingCard({
   });
   /** 극단 입력의 기댓값은 회색 중립색으로 — 수익 예상처럼 읽히지 않게 */
   const neutralValue = extremeStop;
+  /** 계산 수량 0주 — 매매가 실행되지 않는 무포지션 상태 */
+  const noPosition = !(size.shares > 0);
 
   return (
     <section className="card sizing-card" aria-labelledby={headingId ?? "sizing-title"}>
@@ -85,11 +87,13 @@ export function SizingCard({
           <dd>
             {formatNumber(size.shares, 0)}주
             <span className="kv-sub">
-              {size.boundBy === "손실 한도"
-                ? "손실 한도 안에서 계산"
-                : size.boundBy === "계좌 금액"
-                  ? "계좌 금액(현금)에서 제한"
-                  : "제한 없음"}
+              {noPosition
+                ? "1주도 살 수 없는 조건(무포지션)"
+                : size.boundBy === "손실 한도"
+                  ? "손실 한도 안에서 계산"
+                  : size.boundBy === "계좌 금액"
+                    ? "계좌 금액(현금)에서 제한"
+                    : "제한 없음"}
             </span>
           </dd>
         </div>
@@ -117,11 +121,17 @@ export function SizingCard({
           </dt>
           <dd>
             {formatPctValue(size.effectiveRiskPct, 2)}
-            <span className="kv-sub">
-              계획한 허용 손실 {formatPctValue(riskPct, 2)} 기준으로는{" "}
-              {moneyLabel(size.lossBudget, unit)}이지만, 실제 수량 {formatNumber(size.shares, 0)}주 ×
-              위험폭 {formatPrice(size.riskPerShare, unit)} = {moneyLabel(size.maxLoss, unit)}이에요.
-              아래 생존 시뮬레이션도 이 비율로 계산합니다.
+            <span className="kv-sub" data-testid="effective-risk-note">
+              {noPosition ? (
+                "0주라 실제로 거는 돈이 없어요 — 자금 변동이 없으므로 아래 생존 시뮬레이션도 0%로 계산합니다."
+              ) : (
+                <>
+                  계획한 허용 손실 {formatPctValue(riskPct, 2)} 기준으로는{" "}
+                  {moneyLabel(size.lossBudget, unit)}이지만, 실제 수량 {formatNumber(size.shares, 0)}주 ×
+                  위험폭 {formatPrice(size.riskPerShare, unit)} = {moneyLabel(size.maxLoss, unit)}이에요.
+                  아래 생존 시뮬레이션도 이 비율로 계산합니다.
+                </>
+              )}
             </span>
           </dd>
         </div>

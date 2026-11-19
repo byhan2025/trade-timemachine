@@ -34,6 +34,7 @@ import {
   easyGlossary,
   TRAFFIC_BADGES,
   TRAFFIC_BASIS,
+  EXTREME_STOP_REASON,
   FLAT_R,
   trafficLevel,
   trafficBadge,
@@ -55,6 +56,12 @@ import {
   survivalFlatNote,
   axisLabels,
   isFlatSpan,
+  decimalsOf,
+  roundTo,
+  mirrorPrice,
+  offsetPrice,
+  roundPrice,
+  EXTREME_STOP_RATIO,
 } from "./.build/lib.mjs";
 
 /* ---------------------------------------------------------------- helpers */
@@ -1169,4 +1176,193 @@ test("v2.2 CSS: 각주 12px 이상·신호등 18px/44px·단어 단위 줄바꿈
   assert.match(ruleOf(".math-details > summary"), /min-height:\s*44px/);
   assert.match(ruleOf(".glossary-block > summary"), /min-height:\s*44px/);
   assert.match(ruleOf(".combo-cell"), /min-height:\s*64px/);
+});
+
+/* ================================================================ v2.2.1 4호 봇 결함 4건 */
+
+test("v2.2.1 결함1: 극단 입력은 유리/손실 판정 대신 ⚪ 참고하기 어려워요(중립)로 분리한다", () => {
+  assert.equal(TRAFFIC_BADGES.neutral, "⚪ 참고하기 어려워요");
+  assert.match(EXTREME_STOP_REASON, /^손절폭이 극단적으로 좁아 실제 체결·수수료 오차가 큽니다$/);
+  // 극단 입력(진입 100,000 / 손절 99,999.99)은 평균 R이 커도 유리 판정을 내리지 않는다
+  assert.equal(trafficLevel(729.07, true), "neutral");
+  assert.equal(trafficBadge(729.07, true), "⚪ 참고하기 어려워요");
+  assert.equal(trafficLevel(-729.07, true), "neutral");
+  // 극단이 아니면 종전 3단계 그대로 (회귀 방지)
+  assert.equal(trafficLevel(729.07), "green");
+  assert.equal(trafficLevel(-0.182), "red");
+  assert.equal(trafficLevel(0.001), "yellow");
+  assert.ok(!trafficBadge(729.07, true).includes("🟢"));
+
+  const sim = {
+    replays: 10000,
+    pTarget: 0.074,
+    pStop: 0.926,
+    pNeither: 0,
+    pGreen: 0.08,
+    avgR: 729.07,
+    rAtTarget: 1,
+    barsLeft: 59,
+  };
+  const extreme = easySummary({
+    sim,
+    oneR: 1,
+    shares: 100,
+    unit: "원",
+    side: "buy",
+    ratio: 0.00001,
+    rr: 1,
+    sessions: 57,
+    extreme: true,
+  });
+  assert.equal(extreme.level, "neutral");
+  assert.equal(extreme.badge, "⚪ 참고하기 어려워요");
+  // 이유를 3줄 결론에도 그대로 적는다
+  assert.match(extreme.lines[2], /손절폭이 극단적으로 좁아 실제 체결·수수료 오차가 큽니다/);
+  assert.match(extreme.lines[2], /참고하기 어려워요/);
+  // 금액 칩도 '이익/손해' 판정을 하지 않는다
+  assert.equal(
+    easyMoneyChip({ avgR: 729.07, oneR: 1, unit: "원", shares: 100, extreme: true }),
+    "손절폭이 극단적으로 좁아 금액 비교를 보류했어요"
+  );
+  // 극단 플래그가 없으면 기존 문구 그대로
+  const normal = easySummary({
+    sim: { ...sim, avgR: 0.146, pTarget: 0.3, pStop: 0.6, pNeither: 0.1 },
+    oneR: 100_000,
+    shares: 10,
+    unit: "원",
+    side: "buy",
+    ratio: 0.5,
+    rr: 2,
+    sessions: 57,
+  });
+  assert.equal(normal.level, "green");
+  assert.equal(easyMoneyChip({ avgR: 0.146, oneR: 100_000, unit: "원", shares: 10 }), "1번에 평균 14,600원 이익");
+  // ⚪ 중립 배지·테두리 CSS가 실제로 있다
+  assert.match(ruleOf(".traffic.neutral"), /background:\s*#f1f5f9/);
+  assert.match(ruleOf(".traffic.neutral"), /color:\s*#334155/);
+  assert.match(ruleOf(".verdict.neutral"), /border-left-color:\s*#94a3b8/);
+  assert.doesNotMatch(ruleOf(".verdict.neutral"), /#16a34a|#dc2626/);
+});
+
+test("v2.2.1 결함2: 0주면 생존 시뮬레이션도 위험률 0(100 유지, 시작 자금 아래 확률 0%)으로 맞춘다", () => {
+  // 1주 값(100,000원)이 계좌(50,000원)보다 커 0주가 되는 조건
+  const size = sizePosition({
+    entry: 100_000,
+    stop: 90_000,
+    target: 120_000,
+    account: 50_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: -0.2,
+  });
+  assert.equal(size.shares, 0);
+  assert.equal(size.maxLoss, 0);
+  // 수량 카드의 손실액(0원)과 같은 기준 — 계획 위험률 1%를 대신 쓰지 않는다
+  assert.equal(size.effectiveRiskPct, 0);
+
+  const rSamples = Float64Array.from({ length: 50 }, () => -1);
+  const surv = simulateSurvival({
+    rSamples,
+    trades: 20,
+    riskPct: size.effectiveRiskPct,
+    startEquity: 50_000,
+    scenarios: 400,
+    seed: 19,
+  });
+  assert.equal(surv.noTrade, true);
+  assert.equal(surv.riskPct, 0);
+  assert.equal(surv.oneR, 0);
+  assert.equal(surv.belowStartProb, 0);
+  assert.equal(surv.scenarios, 400);
+  assert.equal(surv.median.length, 21);
+  assert.ok(surv.median.every((v) => v === 100), "자금 궤적이 100으로 유지");
+  assert.ok(surv.p10.every((v) => v === 100) && surv.p90.every((v) => v === 100));
+  assert.equal(surv.finalMedian, 50_000);
+  assert.equal(surv.maxStreakMax, 0);
+
+  // 위험률이 0이 아니면 종전대로 R 분포를 적용한다 (회귀 방지)
+  const normal = simulateSurvival({
+    rSamples,
+    trades: 2,
+    riskPct: 1,
+    startEquity: 1_000_000,
+    scenarios: 100,
+    seed: 19,
+  });
+  assert.equal(normal.noTrade, false);
+  assert.ok(normal.belowStartProb > 0.9);
+  assert.ok(Math.abs(normal.median[2] - 98.01) < 1e-9, `median=${normal.median[2]}`);
+});
+
+test("v2.2.1 결함3: 매수↔매도 방향 전환은 소수 가격의 0.01 정밀도를 보존한다", () => {
+  // 원인: 원 단위 roundPrice 는 100,000.01 을 100,000 으로 지운다
+  assert.equal(roundPrice(100_000.01, "원"), 100_000);
+  assert.equal(decimalsOf(99_999.99), 2);
+  assert.equal(decimalsOf(196_400), 0);
+  assert.equal(roundTo(100_000.01000000001, 2), 100_000.01);
+
+  // 진입 100,000 / 손절 99,999.99 → 매도 전환 후 손절 100,000.01 (0.01 차이 유지)
+  const mirrored = mirrorPrice(100_000, 99_999.99, "원");
+  assert.equal(mirrored, 100_000.01);
+  assert.notEqual(mirrored, 100_000);
+  // 왕복해도 원래 값으로 돌아온다
+  assert.equal(mirrorPrice(100_000, mirrored, "원"), 99_999.99);
+  // 매도 조건(목표 < 진입 < 손절)이 유지된다
+  const target = mirrorPrice(100_000, 100_100, "원");
+  assert.equal(target, 99_900);
+  assert.ok(target < 100_000 && 100_000 < mirrored);
+  // 정수 입력은 종전과 같은 정수로 나온다
+  assert.equal(mirrorPrice(196_400, 194_436, "원"), 198_364);
+  assert.equal(mirrorPrice(196_400, 200_328, "원"), 192_472);
+  // 1R 목표도 같은 정밀도 규칙 (진입가와 목표가가 같아지는 문제 방지)
+  assert.equal(offsetPrice(100_000, 0.01, "원"), 100_000.01);
+  assert.equal(offsetPrice(100_000, -0.01, "원"), 99_999.99);
+  assert.equal(offsetPrice(196_400, 1_964, "원"), 198_364);
+  assert.equal(offsetPrice(196_400, -1_964, "원"), 194_436);
+  // 원 단위가 아닌 종목(USD 2자리)도 그대로 2자리를 지킨다
+  assert.equal(mirrorPrice(100.05, 99.99, "USD"), 100.11);
+  // 극단 손절폭 판정은 그대로 (0.00001% < 0.01%)
+  assert.ok(Math.abs(100_000 - 99_999.99) / 100_000 < EXTREME_STOP_RATIO);
+  assert.ok(Math.abs(100_000 - mirrored) / 100_000 < EXTREME_STOP_RATIO);
+});
+
+test("v2.2.1 결함4: 모든 안내·각주 글꼴이 12px 이상이다", () => {
+  // styles.css 의 모든 px font-size 선언을 훑는다 (SVG 인라인 속성은 대상 아님)
+  const sizes = [...V22_CSS.matchAll(/font-size:\s*([\d.]+)px/g)].map((m) => Number(m[1]));
+  assert.ok(sizes.length > 40, `font-size 선언 ${sizes.length}개`);
+  assert.deepEqual(
+    sizes.filter((s) => s < 12),
+    [],
+    "12px 미만 font-size 가 남아 있습니다"
+  );
+  // 안전 안내·각주로 쓰는 대표 선택자는 12px 이상 (11.5px → 12/12.5)
+  for (const sel of [
+    ".safe-line",
+    ".disclaimer",
+    ".footnote",
+    ".report-foot",
+    ".privacy-note",
+    ".example-note",
+    ".stat-caption",
+    ".insight-label",
+    ".footer p",
+    ".tag-example",
+    ".result-basis",
+    ".relay-note",
+    ".live-status-detail",
+    ".thermo-badge",
+    ".combo-best-line",
+    ".combo-col-head",
+    ".kv-sub",
+    ".stat-sub",
+    ".kv-term",
+    ".term-note",
+    ".chart-note",
+  ]) {
+    const size = fontSizeOf(sel);
+    assert.ok(size !== null && size >= 12, `${sel} font-size=${size}`);
+  }
+  // 380px 이하에서 줄이던 10.5px·10px 도 12px 로 올렸다
+  const narrow380 = V22_CSS.slice(V22_CSS.indexOf("@media (max-width: 380px)"));
+  assert.doesNotMatch(narrow380.slice(0, 900), /font-size:\s*(1[01](\.\d)?)px/);
 });

@@ -37,6 +37,11 @@ export interface SurvivalResult {
   riskPct: number;
   /** 시작 자금 기준 1R 금액 (startEquity × riskPct/100) */
   oneR: number;
+  /**
+   * 매매가 실행되지 않는 상태(계산 수량 0주) — 위험률 0으로 자금이 변하지 않는다.
+   * 이때는 1% 위험을 적용한 것처럼 손실 확률을 보여 주지 않는다(v2.2.1).
+   */
+  noTrade: boolean;
 }
 
 function quantile(sorted: Float64Array, q: number): number {
@@ -55,7 +60,37 @@ export function simulateSurvival(input: SurvivalInput): SurvivalResult {
   const risk = input.riskPct / 100;
   const rng = mulberry32(input.seed ?? 19);
   const n = input.rSamples.length;
-  if (!n || !(input.startEquity > 0) || !(risk > 0)) {
+
+  // 계산된 수량이 0주(무포지션)면 매매가 실행되지 않아 자금이 그대로다.
+  // 계획 위험률(예: 1%)을 대신 넣어 손실 확률을 만들지 않는다 — 수량 카드(0원)와 모순되기 때문(v2.2.1).
+  if (!(risk > 0)) {
+    const flat = new Array(trades + 1).fill(100);
+    let sumR = 0;
+    for (let i = 0; i < n; i++) sumR += input.rSamples[i];
+    return {
+      trades,
+      scenarios,
+      median: flat.slice(),
+      p10: flat.slice(),
+      p90: flat.slice(),
+      finalMedianIdx: 100,
+      finalP10Idx: 100,
+      finalP90Idx: 100,
+      finalMedian: input.startEquity,
+      finalP10: input.startEquity,
+      finalP90: input.startEquity,
+      belowStartProb: 0,
+      maxStreakMedian: 0,
+      maxStreakP95: 0,
+      maxStreakMax: 0,
+      meanR: n ? sumR / n : 0,
+      riskPct: 0,
+      oneR: 0,
+      noTrade: true,
+    };
+  }
+
+  if (!n || !(input.startEquity > 0)) {
     return {
       trades,
       scenarios: 0,
@@ -75,6 +110,7 @@ export function simulateSurvival(input: SurvivalInput): SurvivalResult {
       meanR: 0,
       riskPct: input.riskPct,
       oneR: 0,
+      noTrade: false,
     };
   }
 
@@ -136,5 +172,6 @@ export function simulateSurvival(input: SurvivalInput): SurvivalResult {
     meanR: sumR / n,
     riskPct: input.riskPct,
     oneR: input.startEquity * risk,
+    noTrade: false,
   };
 }

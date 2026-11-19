@@ -22,14 +22,19 @@ import { avgRBreakdown } from "./summary";
  * 4. 수학적 근거는 문장에 섞지 않고 `easyMathDetail`로 분리해 접이식에 그대로 남긴다(정확성·투명성 유지).
  */
 
-export type TrafficLevel = "red" | "yellow" | "green";
+export type TrafficLevel = "red" | "yellow" | "green" | "neutral";
 
 /** 맨 위 신호등 — 판정 기준은 '1번에 평균 얼마가 남았나'(평균 금액)'다 */
 export const TRAFFIC_BADGES: Record<TrafficLevel, string> = {
   red: "🔴 손실 쪽이 더 많았어요",
   yellow: "🟡 반반에 가까워요",
   green: "🟢 유리한 편이에요 (참고)",
+  /** 4번째 상태 — 손절폭이 극단적으로 좁아 판정 자체를 보류한다(v2.2.1) */
+  neutral: "⚪ 참고하기 어려워요",
 };
+
+/** 극단적으로 좁은 손절폭에서 판정을 보류하는 이유 — 화면에 그대로 적는다 */
+export const EXTREME_STOP_REASON = "손절폭이 극단적으로 좁아 실제 체결·수수료 오차가 큽니다";
 
 /** 배지가 무엇을 기준으로 한 판정인지 배지 바로 밑에 적는다 */
 export const TRAFFIC_BASIS = "평균 금액 기준";
@@ -37,15 +42,20 @@ export const TRAFFIC_BASIS = "평균 금액 기준";
 /** 1회 평균 R이 이 값보다 작으면 '거의 본전(반반)'으로 본다 */
 export const FLAT_R = 0.02;
 
-export function trafficLevel(avgR: number): TrafficLevel {
+/**
+ * 신호등 단계 — extreme(손절폭이 진입가의 0.01% 미만)이면 유리/손실 판정 대신 중립을 돌려준다.
+ * 평균 R이 +729R처럼 부풀려져도 실제 체결 오차 안에서 갈리는 조건이라 판정할 수 없다.
+ */
+export function trafficLevel(avgR: number, extreme = false): TrafficLevel {
+  if (extreme) return "neutral";
   if (!isFinite(avgR)) return "yellow";
   if (avgR <= -FLAT_R) return "red";
   if (avgR >= FLAT_R) return "green";
   return "yellow";
 }
 
-export function trafficBadge(avgR: number): string {
-  return TRAFFIC_BADGES[trafficLevel(avgR)];
+export function trafficBadge(avgR: number, extreme = false): string {
+  return TRAFFIC_BADGES[trafficLevel(avgR, extreme)];
 }
 
 /**
@@ -90,8 +100,16 @@ export function avgMoneyPerTrade(avgR: number, oneR: number): number {
 }
 
 /** 신호등 바로 아래 한 줄 — 3줄보다 짧게 '1번에 평균 얼마'만 */
-export function easyMoneyChip(input: { avgR: number; oneR: number; unit: string; shares: number }): string {
-  const { avgR, oneR, unit, shares } = input;
+export function easyMoneyChip(input: {
+  avgR: number;
+  oneR: number;
+  unit: string;
+  shares: number;
+  /** 손절폭이 극단적으로 좁은 입력이면 금액 비교를 보류한다 */
+  extreme?: boolean;
+}): string {
+  const { avgR, oneR, unit, shares, extreme } = input;
+  if (extreme) return "손절폭이 극단적으로 좁아 금액 비교를 보류했어요";
   if (!(shares > 0) || !(oneR > 0)) {
     const mood = avgR < -FLAT_R ? "손실" : avgR > FLAT_R ? "이익" : "반반";
     return `1번 결과 평균은 ${mood} 쪽`;
@@ -193,8 +211,10 @@ export function easyConclusion(input: {
   rr: number;
   sessions: number;
   replays: number;
+  /** 손절폭이 극단적으로 좁은 입력이면 결론도 참고 불가로 표시한다 */
+  extreme?: boolean;
 }): string {
-  const { avgR, pTarget, pStop, ratio, rr, sessions, replays } = input;
+  const { avgR, pTarget, pStop, ratio, rr, sessions, replays, extreme } = input;
   const stopFirst = pStop > pTarget;
   let body: string;
   if (ratio > 0 && ratio < 0.6) {
@@ -219,8 +239,10 @@ export function easyConclusion(input: {
       : avgR > FLAT_R
         ? " 이길 때 버는 돈이 더 커서, 1번 평균은 이익 쪽이었어요."
         : " 이번에는 이익과 손실이 거의 반반이었어요.";
+  // 극단 입력: 계산된 결론 문장을 지우지 않되, 판정이 아니라 참고 불가임을 같은 줄에서 밝힌다.
+  const caution = extreme ? ` ${EXTREME_STOP_REASON} — 이 결론은 판정이 아니라 참고하기 어려워요.` : "";
 
-  return `과거 ${sessions}일 흐름으로 ${replays.toLocaleString("ko-KR")}번 돌려보니, ${body}${tail}`;
+  return `과거 ${sessions}일 흐름으로 ${replays.toLocaleString("ko-KR")}번 돌려보니, ${body}${tail}${caution}`;
 }
 
 /** 쉬운 3줄 + 신호등을 한 번에 만든다 */
@@ -242,9 +264,11 @@ export function easySummary(input: EasySummaryInput): EasySummaryResult {
       rr: input.rr,
       sessions: input.sessions,
       replays: input.sim.replays,
+      extreme: input.extreme,
     }),
   ];
-  return { level: trafficLevel(input.sim.avgR), badge: trafficBadge(input.sim.avgR), lines };
+  const level = trafficLevel(input.sim.avgR, input.extreme === true);
+  return { level, badge: TRAFFIC_BADGES[level], lines };
 }
 
 /** 접이식 '숫자·전문 산식 자세히 보기' — 정확한 비율·R 분해·1만 회 조건을 그대로 남긴다 */

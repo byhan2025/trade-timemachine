@@ -5,7 +5,7 @@ import { simulate } from "./lib/simulate";
 import { historyReplay } from "./lib/backtest";
 import { sizePosition } from "./lib/sizing";
 import { parseCustom } from "./lib/parseCustom";
-import { formatPrice, formatPct, formatR, roundPrice } from "./lib/format";
+import { formatPrice, formatPct, formatR, mirrorPrice, offsetPrice, roundPrice } from "./lib/format";
 import { fetchStockBars, RELAY_OFFLINE_MESSAGE, StockApiError } from "./lib/stockApi";
 import type { RunResult } from "./lib/run";
 import { FanChart } from "./components/FanChart";
@@ -328,8 +328,10 @@ export default function App() {
     const s = num(stop);
     if (!(e > 0) || !(s > 0) || e === s) return;
     const risk = Math.abs(e - s);
-    const t = side === "buy" ? e + r * risk : e - r * risk;
-    setTarget(String(roundPrice(t, unit)));
+    // 원 단위로 반올림하면 99,999.99처럼 소수 입력의 0.01이 사라져 목표가가 진입가와 같아진다.
+    // 입력값의 소수 정밀도를 보존한 채 목표가를 정한다(v2.2.1).
+    const t = side === "buy" ? offsetPrice(e, r * risk, unit) : offsetPrice(e, -r * risk, unit);
+    setTarget(String(t));
   };
 
   const changeSide = (next: Side) => {
@@ -337,8 +339,10 @@ export default function App() {
     const e = num(entry);
     const s = num(stop);
     const t = num(target);
-    if (e > 0 && s > 0) setStop(String(roundPrice(2 * e - s, unit)));
-    if (e > 0 && t > 0) setTarget(String(roundPrice(2 * e - t, unit)));
+    // 방향 전환은 진입가 기준 대칭 미러링 — 화면 단위(원)로 반올림하면 99,999.99의 0.01이 사라지고
+    // 100,000 / 99,999.99가 같은 가격이 된다. 입력값의 소수 자릿수를 보존한다(v2.2.1).
+    if (e > 0 && s > 0) setStop(String(mirrorPrice(e, s, unit)));
+    if (e > 0 && t > 0) setTarget(String(mirrorPrice(e, t, unit)));
     setSide(next);
   };
 
@@ -371,7 +375,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.2.0 · 쉬운 해석 리포트</span>
+        <span className="pill">v2.2.1 · 쉬운 해석 리포트</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -835,7 +839,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.2.0 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.2.1 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>

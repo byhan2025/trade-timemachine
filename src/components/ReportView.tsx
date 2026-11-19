@@ -10,6 +10,7 @@ import { COMBO_MULTIPLE_NOTE, GREEN_BREAKDOWN, GREEN_LABEL, easyGlossary } from 
 import type { ComboMode } from "../lib/terms";
 import { EXTREME_STOP_RATIO } from "../lib/sizing";
 import {
+  EXTREME_STOP_REASON,
   TRAFFIC_BASIS,
   easyMathDetail,
   easyMoneyChip,
@@ -76,9 +77,9 @@ export function ReportView({ run, stale, onBack }: Props) {
     return () => window.clearTimeout(id);
   }, [run.signature, run.dataset, run.plan.entry, run.plan.side, run.plan.entryBar, levels]);
 
-  /** 수량 카드의 실제 유효 위험률 — 현금 상한으로 수량이 줄면 계획 1%가 아니라 실제 1R을 쓴다 */
-  const effectiveRiskPct =
-    run.size.shares > 0 ? run.size.effectiveRiskPct : run.plan.riskPct;
+  /** 수량 카드의 실제 유효 위험률 — 현금 상한으로 수량이 줄면 계획 1%가 아니라 실제 1R을 쓴다.
+   *  계산 수량이 0주면 실제로 거는 돈이 없으므로 0(자금 변동 없음)이다(v2.2.1). */
+  const effectiveRiskPct = run.size.effectiveRiskPct;
 
   const survival = useMemo(() => {
     const samples = run.sim.rSamples;
@@ -114,6 +115,7 @@ export function ReportView({ run, stale, onBack }: Props) {
     oneR: run.size.maxLoss,
     unit,
     shares: run.size.shares,
+    extreme: extremeStop,
   });
   const detail = easyMathDetail({ sim: run.sim, oneR: run.size.maxLoss, unit });
   const glossary = easyGlossary(run.plan.side);
@@ -175,8 +177,8 @@ export function ReportView({ run, stale, onBack }: Props) {
         </ol>
         {extremeStop && (
           <p className="alert warn small verdict-caution" role="status" data-testid="extreme-caution">
-            손절폭이 진입가의 0.01% 미만으로 극단적으로 좁아요. 그래서 위 신호등과 3줄은 참고하기
-            어려워요 — 숫자가 실제보다 크게 보일 수 있어요.
+            {EXTREME_STOP_REASON}. 그래서 위 신호등은 유리/손실 판정 대신 '⚪ 참고하기
+            어려워요'로 표시했어요 — 숫자가 실제보다 크게 보일 수 있어요.
           </p>
         )}
         <details className="math-details" data-testid="math-details">
@@ -276,12 +278,15 @@ export function ReportView({ run, stale, onBack }: Props) {
           <span className="badge">복리 · 현재 자금 기준</span>
         </div>
         <p className="card-desc">
-          방금 나온 1번 결과를 20번 연달아 해봤어요. 시작 자금을 100으로 놓고, 운을 각각 다르게 굴린{" "}
-          {survival ? survival.scenarios.toLocaleString("ko-KR") : "4,000"}명의 20번 뒤 자금을 줄 세운
-          그래프예요.{" "}
-          {run.size.riskLimitedByCash
-            ? "1번에 거는 돈은 계획한 허용 손실률이 아니라 수량 카드의 실제 최대 손실 기준입니다."
-            : "1번에 거는 돈은 수량 카드의 실제 최대 손실 기준입니다."}
+          {run.size.shares > 0
+            ? `방금 나온 1번 결과를 ${survival?.trades ?? 20}번 연달아 해봤어요. 시작 자금을 100으로 놓고, 운을 각각 다르게 굴린 ${
+                survival ? survival.scenarios.toLocaleString("ko-KR") : "4,000"
+              }명의 ${survival?.trades ?? 20}번 뒤 자금을 줄 세운 그래프예요. ${
+                run.size.riskLimitedByCash
+                  ? "1번에 거는 돈은 계획한 허용 손실률이 아니라 수량 카드의 실제 최대 손실 기준입니다."
+                  : "1번에 거는 돈은 수량 카드의 실제 최대 손실 기준입니다."
+              }`
+            : "계산된 수량이 0주예요. 이 조건에서는 1주도 살 수 없어 매매가 아예 실행되지 않으므로, 자금도 변하지 않아요. 그래서 계획한 허용 손실률을 적용하지 않고 ‘변동 없음’으로 계산했어요."}
         </p>
         {survival ? (
           <SurvivalChart

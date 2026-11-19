@@ -88,6 +88,8 @@ export function SurvivalChart({
   /** 정수 주 내림 때문에 계획보다 아주 조금 작아진 경우(현금 한도와 구분해 적는다) */
   const roundingOnly = !cashLimited && Math.abs(riskPct - planRiskPct) > 1e-9;
   const idx = (v: number) => survivalIndexText(v, flat);
+  /** 계산 수량 0주 — 매매가 실행되지 않아 자금이 변하지 않는 상태 */
+  const noTrade = survival.noTrade;
 
   return (
     <div ref={ref} className="chart-wrap survival" data-testid="survival-chart">
@@ -143,11 +145,19 @@ export function SurvivalChart({
         <line x1={padL} x2={padL} y1={padT} y2={padT + plotH} stroke="#cbd5e1" strokeWidth={1} />
       </svg>
       <p className="chart-note" data-testid="survival-scale-note">
-        20번을 마친 뒤 남은 돈을 100명 순서로 줄 세운 값이에요(시작 = 100).{" "}
-        {flat
-          ? `${survivalFlatNote(min, max)} — 그래프가 거의 평평해요.`
-          : `그래프 세로축은 ${min.toFixed(1)}에서 ${max.toFixed(1)} 사이예요.`}
+        {noTrade
+          ? "매매가 실행되지 않아 자금이 시작 값 100에 그대로 머물러요."
+          : `20번을 마친 뒤 남은 돈을 100명 순서로 줄 세운 값이에요(시작 = 100). ${
+              flat
+                ? `${survivalFlatNote(min, max)} — 그래프가 거의 평평해요.`
+                : `그래프 세로축은 ${min.toFixed(1)}에서 ${max.toFixed(1)} 사이예요.`
+            }`}
       </p>
+      {noTrade && (
+        <p className="alert warn small no-trade-note" role="status" data-testid="survival-no-trade">
+          0주라 매매가 실행되지 않아 자금 변동이 없어요 (100 유지, 시작 자금 아래 확률 0%)
+        </p>
+      )}
       <ul className="chart-legend">
         <li>
           <span className="swatch" style={{ background: "#93c5fd" }} /> {SURVIVAL_LABELS.high}
@@ -196,32 +206,45 @@ export function SurvivalChart({
           <span className="stat-label">1번에 거는 돈</span>
           <strong>{moneyLabel(oneR, unit)}</strong>
           <span className="muted small">
-            손절되면 이만큼 잃어요 · 계좌의 {formatPctValue(riskPct, 2)}
-            {cashLimited
-              ? ` · 계좌 현금 한도로 계획 ${formatPctValue(planRiskPct, 2)}보다 작아짐`
-              : roundingOnly
-                ? ` · 계획 ${formatPctValue(planRiskPct, 2)}에서 정수 주 내림`
-                : ""}
+            {noTrade
+              ? "0주라 실제로 거는 돈이 없어요 · 계좌의 0.00%"
+              : `손절되면 이만큼 잃어요 · 계좌의 ${formatPctValue(riskPct, 2)}${
+                  cashLimited
+                    ? ` · 계좌 현금 한도로 계획 ${formatPctValue(planRiskPct, 2)}보다 작아짐`
+                    : roundingOnly
+                      ? ` · 계획 ${formatPctValue(planRiskPct, 2)}에서 정수 주 내림`
+                      : ""
+                }`}
           </span>
         </div>
       </div>
       <p className="footnote" data-testid="survival-footnote">
-        계좌 {moneyLabel(account, unit)}에서 매매마다 현재 자금의 {formatPctValue(riskPct, 2)}(1번에{" "}
-        {moneyLabel(oneR, unit)})만큼만 걸고(복리) {survival.trades}회를 반복한{" "}
-        {survival.scenarios.toLocaleString("ko-KR")}개 시나리오예요.
-        {cashLimited && (
+        {noTrade ? (
           <>
-            {" "}
-            <strong>
-              수량 카드에서 계좌 현금 한도가 먼저 걸려 실제로 거는 돈이 계획한 허용 손실(
-              {formatPctValue(planRiskPct, 2)} = {moneyLabel((account * planRiskPct) / 100, unit)})보다
-              작습니다. 그래서 이 그래프도 계획 위험률을 그대로 쓰지 않고, 수량 카드의 실제 위험률(
-              {formatPctValue(riskPct, 2)})로 계산했습니다.
-            </strong>
+            계산된 수량이 0주라 매매를 한 번도 실행하지 않았어요. 시작 자금 100(계좌{" "}
+            {moneyLabel(account, unit)})이 그대로 유지되고, 20번 뒤 시작 자금보다 적을 확률은 0%예요.
+            계획한 허용 손실률({formatPctValue(planRiskPct, 2)})은 실제로 건 돈이 없어 적용하지 않았습니다.
           </>
-        )}{" "}
-        20번 뒤 시작 자금보다 적을 확률은 {(survival.belowStartProb * 100).toFixed(0)}%예요. 미래 수익
-        예측이 아니라 분포 가정에 따른 참고치입니다.
+        ) : (
+          <>
+            계좌 {moneyLabel(account, unit)}에서 매매마다 현재 자금의 {formatPctValue(riskPct, 2)}(1번에{" "}
+            {moneyLabel(oneR, unit)})만큼만 걸고(복리) {survival.trades}회를 반복한{" "}
+            {survival.scenarios.toLocaleString("ko-KR")}개 시나리오예요.
+            {cashLimited && (
+              <>
+                {" "}
+                <strong>
+                  수량 카드에서 계좌 현금 한도가 먼저 걸려 실제로 거는 돈이 계획한 허용 손실(
+                  {formatPctValue(planRiskPct, 2)} = {moneyLabel((account * planRiskPct) / 100, unit)})보다
+                  작습니다. 그래서 이 그래프도 계획 위험률을 그대로 쓰지 않고, 수량 카드의 실제 위험률(
+                  {formatPctValue(riskPct, 2)})로 계산했습니다.
+                </strong>
+              </>
+            )}{" "}
+            20번 뒤 시작 자금보다 적을 확률은 {(survival.belowStartProb * 100).toFixed(0)}%예요. 미래 수익
+            예측이 아니라 분포 가정에 따른 참고치입니다.
+          </>
+        )}
       </p>
     </div>
   );

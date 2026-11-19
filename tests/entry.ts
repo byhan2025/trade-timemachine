@@ -21,6 +21,11 @@ export {
   moneyLabel,
   axisLabels,
   isFlatSpan,
+  decimalsOf,
+  roundTo,
+  mirrorPrice,
+  offsetPrice,
+  roundPrice,
 } from "../src/lib/format";
 export {
   COMBO_MODES,
@@ -39,6 +44,7 @@ export {
 export {
   TRAFFIC_BADGES,
   TRAFFIC_BASIS,
+  EXTREME_STOP_REASON,
   FLAT_R,
   trafficLevel,
   trafficBadge,

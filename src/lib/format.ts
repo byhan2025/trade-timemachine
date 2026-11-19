@@ -51,6 +51,52 @@ export function roundPrice(x: number, unit: string): number {
   return Math.round(x * 100) / 100;
 }
 
+/** 숫자의 소수 자릿수 (최대 max자리) — 99,999.99 → 2, 196,400 → 0 */
+export function decimalsOf(x: number, max = 6): number {
+  if (!isFinite(x)) return 0;
+  const text = String(x);
+  if (text.includes("e-")) {
+    // 아주 작은 값(1e-7)은 소수 자릿수로 직접 센다
+    const exp = Number(text.split("e-")[1]);
+    return Math.min(max, exp + (text.split("e-")[0].split(".")[1] ?? "").length);
+  }
+  const dot = text.indexOf(".");
+  return dot < 0 ? 0 : Math.min(max, text.length - dot - 1);
+}
+
+/**
+ * 가격을 지정한 소수 자릿수로 반올림한다 (부동소수점 꼬리 제거).
+ * 자릿수는 입력값의 정밀도에서 가져오므로 99,999.99의 0.01을 살린다.
+ */
+export function roundTo(x: number, decimals: number): number {
+  if (!isFinite(x)) return x;
+  const d = Math.max(0, Math.min(6, Math.trunc(decimals)));
+  const scale = Math.pow(10, d);
+  return Math.round((x + Number.EPSILON * Math.sign(x)) * scale) / scale;
+}
+
+/**
+ * 진입가 기준 대칭 미러 가격 — 매수↔매도 방향 전환과 손익비 프리셋에 쓴다(v2.2.1).
+ * 화면 단위(원)로 반올림하지 않고 **기존 입력값의 소수 자릿수**를 보존한다.
+ * 진입 100,000 / 손절 99,999.99 → 100,000.01 (0.01을 0으로 지우지 않는다).
+ */
+export function mirrorPrice(entry: number, price: number, unit: string): number {
+  if (!isFinite(entry) || !isFinite(price)) return price;
+  const base = unit === "원" ? 0 : 2;
+  const decimals = Math.max(base, decimalsOf(entry, 4), decimalsOf(price, 4));
+  return roundTo(2 * entry - price, Math.min(4, decimals));
+}
+
+/**
+ * 진입가에서 delta 만큼 떨어진 가격 — 입력 가격의 소수 정밀도를 보존한다.
+ * (방향 전환과 같은 정밀도 규칙: 100,000 / 99,999.99에서 1R 목표는 100,000.01)
+ */
+export function offsetPrice(entry: number, delta: number, unit: string): number {
+  const base = unit === "원" ? 0 : 2;
+  const decimals = Math.max(base, decimalsOf(entry, 4), decimalsOf(delta, 4));
+  return roundTo(entry + delta, Math.min(4, decimals));
+}
+
 /**
  * 비율(0.0001 = 0.01%) 표기. 기본은 소수 1자리지만,
  * 0.00%로 뭉개져 값이 사라지는 아주 작은 비율은 소수 6자리까지 늘려 적는다.

@@ -24,7 +24,7 @@ export interface SizeResult {
   shares: number;
   /** 수량 × 1주당 위험폭 = 실제 1회 최대 손실(1R 금액) */
   maxLoss: number;
-  /** 실제 1회 최대 손실 ÷ 계좌 (%) — 화면의 생존 시뮬레이션이 쓰는 유효 위험률 */
+  /** 실제 1회 최대 손실 ÷ 계좌 (%) — 화면의 생존 시뮬레이션이 쓰는 유효 위험률. 수량 0주면 0 */
   effectiveRiskPct: number;
   /** 계좌 현금 한도 때문에 실제 위험률이 계획(riskPct)보다 작아졌는지 */
   riskLimitedByCash: boolean;
@@ -104,7 +104,7 @@ export function sizePosition(input: SizeInput): SizeResult {
     lossBudget,
     shares,
     maxLoss,
-    effectiveRiskPct: shares > 0 && account > 0 ? (maxLoss / account) * 100 : riskPct,
+    effectiveRiskPct: shares > 0 && account > 0 ? (maxLoss / account) * 100 : 0,
     riskLimitedByCash: shares > 0 && byAccount < byLoss,
     riskFormula: riskFormula(side),
     cost: shares * entry,
