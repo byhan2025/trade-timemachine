@@ -420,8 +420,15 @@ export default function App() {
               className="control"
               value={datasetId}
               onChange={(e) => {
+                const next = e.target.value;
                 setRun(null);
-                setDatasetId(e.target.value);
+                if (next === "live" && liveDataset) {
+                  // 실시간 종목으로 되돌아오기 (내장·커스텀에서 돌아온 경우)
+                  setDataset(liveDataset);
+                  setCustomWarnings([]);
+                  applyDefaults(liveDataset);
+                }
+                setDatasetId(next);
               }}
             >
               {liveDataset && (
