@@ -18,6 +18,10 @@ export interface SimInput {
   window?: number;
   samplePaths?: number;
   bandPaths?: number;
+  /** 밴드·샘플 궤적을 만들지 않고 확률·평균 R만 계산한다(9조합 비교용, 빠름) */
+  light?: boolean;
+  /** 재생별 R 값을 rSamples 로 남길지 (기본: light 가 아니면 true) */
+  collectR?: boolean;
 }
 
 export interface SimResult {
@@ -42,6 +46,8 @@ export interface SimResult {
   bands: number[][];
   /** 10~20개 샘플 궤적 (진입가에서 시작) */
   samplePaths: number[][];
+  /** 재생별 R 값 (연속 매매 생존 시뮬레이션 입력) */
+  rSamples?: Float64Array;
   /** 계산에 걸린 시간(ms) */
   ms: number;
 }
@@ -67,7 +73,9 @@ export function simulate(input: SimInput): SimResult {
   const seed = input.seed ?? 19;
   const window = input.window ?? 2;
   const samplePaths = input.samplePaths ?? 20;
-  const bandPaths = input.bandPaths ?? 2000;
+  const light = input.light === true;
+  const bandPaths = light ? 0 : (input.bandPaths ?? 2000);
+  const collectR = input.collectR ?? !light;
   const entryBar = input.entryBar;
   const lastBar = Math.min(input.lastBar ?? pool.slots - 1, pool.slots - 1);
   const slots = pool.slots;
@@ -79,6 +87,7 @@ export function simulate(input: SimInput): SimResult {
   const { h, l, c, sessions } = pool;
   const paths: number[][] = [];
   const closes = new Float64Array(replays);
+  const rs = collectR ? new Float64Array(replays) : null;
   let countTarget = 0;
   let countStop = 0;
   let countClose = 0;
@@ -114,19 +123,21 @@ export function simulate(input: SimInput): SimResult {
       if (keep) path.push(p);
     }
     closes[n] = p;
+    let rThis: number;
     if (outcome === 1) {
       countTarget++;
-      sumR += rAtTarget;
+      rThis = rAtTarget;
       green++;
     } else if (outcome === -1) {
       countStop++;
-      sumR -= 1;
+      rThis = -1;
     } else {
       countClose++;
-      const rr = (long ? p - entry : entry - p) / risk;
-      sumR += rr;
-      if (rr > 0) green++;
+      rThis = (long ? p - entry : entry - p) / risk;
+      if (rThis > 0) green++;
     }
+    if (rs) rs[n] = rThis;
+    sumR += rThis;
     if (keep) paths.push(path);
   }
 
@@ -153,7 +164,7 @@ export function simulate(input: SimInput): SimResult {
     }
   }
   const qs = [0.05, 0.25, 0.5, 0.75, 0.95];
-  const bands: number[][] = columns.map((col) => {
+  const bands: number[][] = light ? [] : columns.map((col) => {
     const sorted = Float64Array.from(col).sort();
     return qs.map((q) => pct(sorted, q));
   });
@@ -176,6 +187,7 @@ export function simulate(input: SimInput): SimResult {
     p95Close: pct(sortedCloses, 0.95),
     bands,
     samplePaths: paths,
+    rSamples: rs ?? undefined,
     ms,
   };
 }

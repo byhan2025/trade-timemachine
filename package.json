@@ -1,7 +1,7 @@
 {
   "name": "trade-timemachine",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "description": "한국형 타임머신 시뮬레이터 - 1만 번 모의 재생 + 실시간 종목 검색 (투자 권유 아님)",
   "scripts": {
@@ -11,7 +11,9 @@
     "preview": "vite preview --port 4180 --strictPort",
     "deploy:pages": "npm run build:pages && node scripts/deploy-pages.mjs",
     "samples": "python3 scripts/fetch_samples.py",
-    "test:api": "deno test --allow-net --allow-read supabase/functions/stock-bars/"
+    "test:api": "deno test --allow-net --allow-read supabase/functions/stock-bars/",
+    "test": "node scripts/test-unit.mjs",
+    "test:unit": "node scripts/test-unit.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
