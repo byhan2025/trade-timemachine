@@ -45,6 +45,9 @@ export {
   TRAFFIC_BADGES,
   TRAFFIC_BASIS,
   EXTREME_STOP_REASON,
+  EXTREME_BANNER_NOTE,
+  EXTREME_AVG_R_NOTE,
+  avgRTone,
   FLAT_R,
   trafficLevel,
   trafficBadge,
@@ -65,3 +68,4 @@ export {
   survivalIndexText,
   survivalFlatNote,
 } from "../src/lib/easy";
+export { ResultCards } from "../src/components/ResultCards";

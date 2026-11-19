@@ -35,6 +35,10 @@ import {
   TRAFFIC_BADGES,
   TRAFFIC_BASIS,
   EXTREME_STOP_REASON,
+  EXTREME_BANNER_NOTE,
+  EXTREME_AVG_R_NOTE,
+  avgRTone,
+  ResultCards,
   FLAT_R,
   trafficLevel,
   trafficBadge,
@@ -1367,4 +1371,98 @@ test("v2.2.1 결함4: 모든 안내·각주 글꼴이 12px 이상이다", () => 
   // 380px 이하에서 줄이던 10.5px·10px 도 12px 로 올렸다
   const narrow380 = V22_CSS.slice(V22_CSS.indexOf("@media (max-width: 380px)"));
   assert.doesNotMatch(narrow380.slice(0, 900), /font-size:\s*(1[01](\.\d)?)px/);
+});
+
+/* ================================================================ v2.2.2 극단 입력 배너·결과카드 중립 통일 */
+
+test("v2.2.2 극단 입력 문구: 배너 1줄·결과카드 보조문구가 계획대로 고정된다", () => {
+  assert.equal(EXTREME_BANNER_NOTE, "손절폭이 너무 좁아 참고하기 어려워요");
+  assert.equal(EXTREME_AVG_R_NOTE, "극단적으로 좁은 손절폭이라 숫자가 크게 보일 수 있어요");
+  // 같은 뜻을 리포트 본문(⚪ 참고하기 어려워요)과 어긋나지 않게 '참고'를 유지한다
+  assert.match(EXTREME_BANNER_NOTE, /참고하기 어려워요$/);
+  assert.match(EXTREME_AVG_R_NOTE, /좁은 손절폭/);
+});
+
+test("v2.2.2 평균 R 색: 극단 입력은 크기·부호와 무관하게 중립, 아니면 종전 pos/neg", () => {
+  // 5초 요약 배너·1만 번 결과 카드·리포트 접이식 통계가 같은 함수를 쓴다
+  assert.equal(avgRTone(729.07, true), "neutral");
+  assert.equal(avgRTone(-729.07, true), "neutral");
+  assert.equal(avgRTone(0, true), "neutral");
+  // 극단이 아니면 종전 그대로 (회귀 방지)
+  assert.equal(avgRTone(729.07), "pos");
+  assert.equal(avgRTone(0), "pos");
+  assert.equal(avgRTone(-0.182), "neg");
+  assert.equal(avgRTone(0.146, false), "pos");
+  // 극단 판정 기준은 easy.ts·sizing.ts가 공유하는 0.01%
+  assert.ok(Math.abs(100_000 - 99_999.99) / 100_000 < EXTREME_STOP_RATIO);
+  assert.ok(!(Math.abs(100_000 - 99_900) / 100_000 < EXTREME_STOP_RATIO));
+});
+
+test("v2.2.2 1만 번 결과 카드: 극단 입력의 평균 결과는 초록/빨강 없이 중립 회색 + 보조 문구", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const sim = {
+    replays: 10000,
+    pTarget: 0.074,
+    pStop: 0.926,
+    pNeither: 0,
+    pGreen: 0.08,
+    avgR: 729.07,
+    rAtTarget: 1,
+    barsLeft: 59,
+    ms: 41,
+    seed: 19,
+  };
+  const extremeHtml = renderToStaticMarkup(
+    ResultCards({ sim, unit: "원", extreme: true })
+  );
+  // 평균 결과 숫자는 pos/neg 가 아니라 neutral
+  assert.match(extremeHtml, /data-testid="avg-r-value"[^>]*class="neutral"|class="neutral"[^>]*data-testid="avg-r-value"/);
+  assert.doesNotMatch(extremeHtml, /class="pos"[^>]*data-testid="avg-r-value"|data-testid="avg-r-value"[^>]*class="pos"/);
+  assert.ok(extremeHtml.includes("+729.07R"), "평균 R 값은 그대로 보인다");
+  assert.ok(extremeHtml.includes(EXTREME_AVG_R_NOTE), "보조 문구가 숫자 옆에 붙는다");
+  assert.match(extremeHtml, /data-testid="avg-r-extreme-note"/);
+
+  const normalHtml = renderToStaticMarkup(ResultCards({ sim, unit: "원" }));
+  assert.match(normalHtml, /class="pos"[^>]*data-testid="avg-r-value"|data-testid="avg-r-value"[^>]*class="pos"/);
+  assert.ok(!normalHtml.includes(EXTREME_AVG_R_NOTE));
+  assert.ok(!normalHtml.includes('data-testid="avg-r-extreme-note"'));
+});
+
+test("v2.2.2 5초 요약 배너: 극단 입력은 평균 R 중립 + 참고 1줄, 일반 입력은 종전 초록 강조", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const banner = app.slice(app.indexOf('data-testid="easy-banner"'), app.indexOf('data-testid="open-report"'));
+  assert.ok(banner.length > 100, "배너 구역을 찾지 못했습니다");
+  // 배너의 평균 R은 avgRTone(극단 판정 공유)으로 색을 정한다
+  assert.match(banner, /avgRTone\(run\.sim\.avgR, isExtremeStop\(run\.plan\.entry, run\.plan\.stop\)\)/);
+  assert.match(banner, /data-testid="banner-avg-r"/);
+  // 극단 입력에서만 '손절폭이 너무 좁아 참고하기 어려워요' 한 줄
+  assert.match(banner, /isExtremeStop\(run\.plan\.entry, run\.plan\.stop\) && \(/);
+  assert.match(banner, /EXTREME_BANNER_NOTE/);
+  // 배너 안에서 평균 R을 초록/빨강으로 직접 고르던 옛 분기는 사라졌다
+  assert.doesNotMatch(banner, /run\.sim\.avgR >= 0 \? "pos" : "neg"/);
+  // 목표·손절 확률은 종전대로 pos/neg (극단 입력에서도 사실 그대로)
+  assert.match(banner, /className="pos">\{formatPct\(run\.sim\.pTarget\)\}/);
+  assert.match(banner, /className="neg">\{formatPct\(run\.sim\.pStop\)\}/);
+  // 결과 카드에도 같은 극단 플래그를 넘긴다
+  assert.match(app, /<ResultCards[\s\S]{0,260}extreme=\{isExtremeStop\(run\.plan\.entry, run\.plan\.stop\)\}/);
+});
+
+test("v2.2.2 리포트 접이식 통계도 같은 중립 색을 쓴다(리포트 본문 ⚪와 불일치 방지)", () => {
+  const rep = readFileSync("src/components/ReportView.tsx", "utf8");
+  const stat = rep.slice(rep.indexOf("1회 평균"), rep.indexOf("1회 평균") + 400);
+  assert.match(stat, /className=\{avgRTone\(run\.sim\.avgR, extremeStop\)\}/);
+  assert.doesNotMatch(stat, /run\.sim\.avgR >= 0 \? "pos" : "neg"/);
+  const cards = readFileSync("src/components/ResultCards.tsx", "utf8");
+  assert.match(cards, /const avgRToneName = avgRTone\(sim\.avgR, extreme === true\)/);
+  assert.match(cards, /className=\{avgRToneName\}/);
+});
+
+test("v2.2.2 CSS: .neutral 은 중립 회색이고 초록/빨강을 쓰지 않는다", () => {
+  const rule = ruleOf(".neutral");
+  assert.ok(rule && rule.includes("color:"), "`.neutral` 규칙이 없습니다");
+  assert.doesNotMatch(rule, /#16a34a|#dc2626|var\(--target\)|var\(--stop\)/);
+  assert.match(rule, /color:\s*#475569/);
+  // pos/neg 는 종전 그대로 (일반 입력의 유리/손실 강조 유지)
+  assert.match(ruleOf(".pos"), /var\(--target\)/);
+  assert.match(ruleOf(".neg"), /var\(--stop\)/);
 });

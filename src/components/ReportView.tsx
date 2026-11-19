@@ -12,6 +12,7 @@ import { EXTREME_STOP_RATIO } from "../lib/sizing";
 import {
   EXTREME_STOP_REASON,
   TRAFFIC_BASIS,
+  avgRTone,
   easyMathDetail,
   easyMoneyChip,
   easySummary,
@@ -204,7 +205,7 @@ export function ReportView({ run, stale, onBack }: Props) {
             </div>
             <div>
               <span className="stat-label">1회 평균</span>
-              <strong className={run.sim.avgR >= 0 ? "pos" : "neg"}>{formatR(run.sim.avgR)}</strong>
+              <strong className={avgRTone(run.sim.avgR, extremeStop)}>{formatR(run.sim.avgR)}</strong>
               <span className="stat-sub">미도달 포함</span>
             </div>
           </div>

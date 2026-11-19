@@ -36,6 +36,30 @@ export const TRAFFIC_BADGES: Record<TrafficLevel, string> = {
 /** 극단적으로 좁은 손절폭에서 판정을 보류하는 이유 — 화면에 그대로 적는다 */
 export const EXTREME_STOP_REASON = "손절폭이 극단적으로 좁아 실제 체결·수수료 오차가 큽니다";
 
+/**
+ * v2.2.2 — 시뮬레이터 '5초 요약' 배너의 극단 입력 한 줄.
+ * 평균 R을 초록으로 강조하지 않는 이유를 배너 안에서 바로 읽게 한다.
+ */
+export const EXTREME_BANNER_NOTE = "손절폭이 너무 좁아 참고하기 어려워요";
+
+/**
+ * v2.2.2 — '1만 번 모의 재생 결과' 카드의 평균 결과(+729.07R 등)에 붙이는 보조 문구.
+ * 극단적으로 좁은 손절폭에서는 R이 부풀려 보인다는 점을 숫자 옆에서 밝힌다.
+ */
+export const EXTREME_AVG_R_NOTE = "극단적으로 좁은 손절폭이라 숫자가 크게 보일 수 있어요";
+
+/** 평균 R 강조 색의 이름 — 극단 입력은 초록/빨강 대신 중립 회색을 쓴다(v2.2.2) */
+export type AvgRTone = "pos" | "neg" | "neutral";
+
+/**
+ * 평균 R에 입힐 색 — 극단 입력(손절폭 < 진입가의 0.01%)이면 이익/손실 판정 대신 중립.
+ * 5초 요약 배너·1만 번 결과 카드·리포트 접이식 통계가 모두 이 함수를 공유한다.
+ */
+export function avgRTone(avgR: number, extreme = false): AvgRTone {
+  if (extreme) return "neutral";
+  return avgR >= 0 ? "pos" : "neg";
+}
+
 /** 배지가 무엇을 기준으로 한 판정인지 배지 바로 밑에 적는다 */
 export const TRAFFIC_BASIS = "평균 금액 기준";
 

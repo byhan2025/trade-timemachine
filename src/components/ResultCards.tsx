@@ -1,6 +1,7 @@
 import type { Dataset } from "../lib/types";
 import type { SimResult } from "../lib/simulate";
 import { formatPriceNumber, formatR } from "../lib/format";
+import { EXTREME_AVG_R_NOTE, avgRTone } from "../lib/easy";
 
 function pctText(x: number): string {
   if (x > 0 && x < 0.0005) return "<0.1%";
@@ -51,11 +52,15 @@ export function ResultCards({
   sim,
   unit,
   dataset,
+  extreme,
 }: {
   sim: SimResult;
   unit: string;
   dataset?: Dataset;
+  /** 손절폭이 진입가의 0.01% 미만인 극단 입력 — 평균 결과를 초록/빨강 대신 중립 회색으로 */
+  extreme?: boolean;
 }) {
+  const avgRToneName = avgRTone(sim.avgR, extreme === true);
   const fmt = (x: number) => formatPriceNumber(x, unit);
   const tenths = splitHundred([sim.pTarget, sim.pStop, sim.pNeither]);
   const items = [
@@ -121,10 +126,18 @@ export function ResultCards({
             (목표 도달 {pctText(sim.pTarget)} + 목표 미도달이나 종가만 유리 {pctText(greenOnly)})
           </span>
         </div>
-        <div>
+        <div data-testid="avg-r-row">
           <span className="insight-label">평균 결과</span>
-          <strong className={sim.avgR >= 0 ? "pos" : "neg"}>{formatR(sim.avgR)}</strong>
+          <strong className={avgRToneName} data-testid="avg-r-value">
+            {formatR(sim.avgR)}
+          </strong>
           <span className="muted small"> / 1회당</span>
+          {extreme === true && (
+            <span className="muted small extreme-note" data-testid="avg-r-extreme-note">
+              {" "}
+              · {EXTREME_AVG_R_NOTE}
+            </span>
+          )}
         </div>
         <div>
           <span className="insight-label">종료가 중앙값</span>

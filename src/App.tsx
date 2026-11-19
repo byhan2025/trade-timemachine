@@ -11,6 +11,7 @@ import type { RunResult } from "./lib/run";
 import { FanChart } from "./components/FanChart";
 import { ResultCards } from "./components/ResultCards";
 import { SizingCard, isExtremeStop } from "./components/SizingCard";
+import { EXTREME_BANNER_NOTE, avgRTone } from "./lib/easy";
 import { BacktestCard } from "./components/BacktestCard";
 import { DataNote } from "./components/DataNote";
 import { StockSearch } from "./components/StockSearch";
@@ -375,7 +376,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.2.1 · 쉬운 해석 리포트</span>
+        <span className="pill">v2.2.2 · 극단 입력 중립 표시</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -752,10 +753,19 @@ export default function App() {
                     <p>
                       1만 번 중 <strong className="pos">{formatPct(run.sim.pTarget)}</strong> 목표 도달 ·{" "}
                       <strong className="neg">{formatPct(run.sim.pStop)}</strong> 손절 · 1회 평균{" "}
-                      <strong className={run.sim.avgR >= 0 ? "pos" : "neg"}>
+                      {/* 극단 입력은 평균 R을 초록으로 강조하지 않고 중립 회색으로 (v2.2.2) */}
+                      <strong
+                        className={avgRTone(run.sim.avgR, isExtremeStop(run.plan.entry, run.plan.stop))}
+                        data-testid="banner-avg-r"
+                      >
                         {formatR(run.sim.avgR)}
                       </strong>
                     </p>
+                    {isExtremeStop(run.plan.entry, run.plan.stop) && (
+                      <p className="muted small" data-testid="banner-extreme-note">
+                        {EXTREME_BANNER_NOTE}
+                      </p>
+                    )}
                     <p className="muted small">
                       신호등 결론부터 초등학생 눈높이로 풀고, 하루 흔들림·손절·목표 조합·20번 생존·수량까지
                       한 페이지에 정리했습니다.
@@ -767,7 +777,12 @@ export default function App() {
                 </div>
 
                 <section className="card">
-                  <ResultCards sim={run.sim} unit={run.dataset.priceUnit} dataset={run.dataset} />
+                  <ResultCards
+                    sim={run.sim}
+                    unit={run.dataset.priceUnit}
+                    dataset={run.dataset}
+                    extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
+                  />
                   <p className="safe-line">
                     1만 회 빈도는 미래 확률이 아니라 과거 봉 재표본 모형 결과입니다. 같은 봉 내 손절·목표
                     동시 도달 시 손절 우선 처리, 종료가 분포는 이후 장 마감까지 재생한 값입니다. 미래
@@ -839,7 +854,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.2.1 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.2.2 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>
