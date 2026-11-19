@@ -13,8 +13,8 @@ interface Props {
 }
 
 const MODES: { key: ComboMode; label: string; hint: string }[] = [
-  { key: "winrate", label: "승률 우선형", hint: "자주 이기는 구조" },
-  { key: "rr", label: "손익비 추구형", hint: "크게 먹는 구조" },
+  { key: "winrate", label: "승률 우선형", hint: "이익 마감 비율이 높은 칸 표시" },
+  { key: "rr", label: "손익비 추구형", hint: "목표 배수 대비 손익비 중심 표시" },
 ];
 
 /**
@@ -35,6 +35,13 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
   const pickedCell =
     (picked && result?.cells.find((c) => cellKey(c) === picked)) || null;
   const bestCell = bestKey ? (result?.cells.find((c) => cellKey(c) === bestKey) ?? null) : null;
+  /** 9칸 모두 평균 R이 0 미만이면 ★·'최고' 배지가 추천처럼 읽히지 않게 중립 표기한다 */
+  const allNegative = !!result && result.cells.length > 0 && result.cells.every((c) => c.avgR < 0);
+  const bestBadge = allNegative
+    ? "가장 높았던 칸(참고)"
+    : mode === "winrate"
+      ? "승률 최고"
+      : "평균 R 최고";
 
   if (loading) {
     return (
@@ -72,6 +79,12 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
           9조합 × {result.replays.toLocaleString("ko-KR")}회 · {result.ms.toFixed(0)}ms
         </span>
       </div>
+
+      {allNegative && (
+        <p className="alert warn small combo-all-negative" role="status" data-testid="combo-all-negative">
+          참고: 이 조건에서는 9개 조합 모두 평균 R이 0 미만(마이너스)입니다.
+        </p>
+      )}
 
       <div className="combo-grid" role="table" aria-label="손절·목표 9조합 비교표">
         <div className="combo-grid-head" role="row">
@@ -112,7 +125,11 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
                     unit
                   )} · 승률 ${formatPct(cell.pGreen)} · 평균 R ${cell.avgR.toFixed(2)}`}
                 >
-                  {best && <span className="combo-best-star" aria-hidden="true">★</span>}
+                  {best && !allNegative && (
+                    <span className="combo-best-star" aria-hidden="true">
+                      ★
+                    </span>
+                  )}
                   <strong>{formatPct(cell.pGreen)}</strong>
                   <span className={cell.avgR >= 0 ? "pos" : "neg"}>
                     {cell.avgR >= 0 ? "+" : "−"}
@@ -126,8 +143,8 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
       </div>
 
       {bestCell && (
-        <p className="combo-best-line">
-          <span className="badge">{mode === "winrate" ? "승률 최고" : "평균 R 최고"}</span> 손절{" "}
+        <p className="combo-best-line" data-testid="combo-best-line">
+          <span className={`badge${allNegative ? " light" : ""}`}>{bestBadge}</span> 손절{" "}
           {(bestCell.stopPct * 100).toFixed(2)}% ({formatPrice(bestCell.stop, unit)}) · 목표{" "}
           {bestCell.targetR}R · 이익 마감 {formatPct(bestCell.pGreen)} · 평균{" "}
           {bestCell.avgR.toFixed(2)}R

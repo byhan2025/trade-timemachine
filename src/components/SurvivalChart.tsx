@@ -17,7 +17,7 @@ function useWidth<T extends HTMLElement>() {
   return { ref, width };
 }
 
-/** 📉 연속 20회 매매 생존 시뮬레이션 — 자금 궤적(중앙값·하위 10%·상위 90%) */
+/** 📉 연속 20회 매매 생존 시뮬레이션 — 자금 궤적(중앙값 · 10번째 백분위 · 90번째 백분위) */
 export function SurvivalChart({
   survival,
   unit,
@@ -74,7 +74,7 @@ export function SurvivalChart({
         role="img"
         aria-label={`${survival.trades}회 연속 매매 시 자금 궤적. 중앙값 ${survival.finalMedianIdx.toFixed(
           1
-        )}%, 하위 10% ${survival.finalP10Idx.toFixed(1)}%, 상위 90% ${survival.finalP90Idx.toFixed(1)}%.`}
+        )}%, 10번째 백분위(하위 10% 흐름) ${survival.finalP10Idx.toFixed(1)}%, 90번째 백분위(상위 10% 흐름) ${survival.finalP90Idx.toFixed(1)}%.`}
       >
         <title>{survival.trades}회 연속 매매 자금 궤적</title>
         <rect x={0} y={0} width={W} height={H} fill="#ffffff" />
@@ -121,10 +121,10 @@ export function SurvivalChart({
           <span className="swatch swatch-median" /> 중앙값
         </li>
         <li>
-          <span className="swatch" style={{ background: "#93c5fd" }} /> 상위 90%
+          <span className="swatch" style={{ background: "#93c5fd" }} /> 90번째 백분위(상위 10% 흐름)
         </li>
         <li>
-          <span className="swatch" style={{ background: "#fca5a5" }} /> 하위 10%
+          <span className="swatch" style={{ background: "#fca5a5" }} /> 10번째 백분위(하위 10% 흐름)
         </li>
       </ul>
 
@@ -138,7 +138,7 @@ export function SurvivalChart({
           <span className="muted small">{moneyLabel(survival.finalMedian, unit)}</span>
         </div>
         <div>
-          <span className="stat-label">하위 10%</span>
+          <span className="stat-label">10번째 백분위(하위 10% 흐름)</span>
           <strong className="neg">
             {survival.finalP10Idx.toFixed(1)}
             <span className="muted small"> / 100</span>
@@ -146,7 +146,7 @@ export function SurvivalChart({
           <span className="muted small">{moneyLabel(survival.finalP10, unit)}</span>
         </div>
         <div>
-          <span className="stat-label">상위 90%</span>
+          <span className="stat-label">90번째 백분위(상위 10% 흐름)</span>
           <strong className="pos">
             {survival.finalP90Idx.toFixed(1)}
             <span className="muted small"> / 100</span>
@@ -163,9 +163,10 @@ export function SurvivalChart({
       </div>
       <p className="footnote">
         계좌 {moneyLabel(account, unit)}에서 매매마다 현재 자금의 {riskPct}%(1R)만큼 위험을 걸고(복리){" "}
-        {survival.trades}회를 반복한 {survival.scenarios.toLocaleString("ko-KR")}개 시나리오입니다. 20회 후
-        시작 자금보다 적을 확률 {(survival.belowStartProb * 100).toFixed(0)}%. 미래 수익 예측이 아니라 분포
-        가정에 따른 참고치입니다.
+        {survival.trades}회를 반복한 {survival.scenarios.toLocaleString("ko-KR")}개 시나리오입니다. 10번째·90번째
+        백분위는 그 시나리오들의 20회 후 자금을 낮은 순으로 세웠을 때 아래에서 10%, 위에서 10% 지점(서로 대칭인
+        하위 10%·상위 10% 흐름)입니다. 20회 후 시작 자금보다 적을 확률{" "}
+        {(survival.belowStartProb * 100).toFixed(0)}%. 미래 수익 예측이 아니라 분포 가정에 따른 참고치입니다.
       </p>
     </div>
   );

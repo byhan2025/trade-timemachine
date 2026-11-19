@@ -437,6 +437,11 @@ input[type="number"] {
   font-size: 12px;
 }
 
+/* 여러 건을 항목별 줄로 보여주는 오류(봉 값 검증) — 줄바꿈을 그대로 살린다 */
+.alert.error {
+  white-space: pre-line;
+}
+
 .footnote {
   margin: 10px 0 0;
   font-size: 11.5px;
@@ -1575,6 +1580,16 @@ a:focus-visible {
   font-size: 11.5px;
   color: var(--ink-soft);
   line-height: 1.5;
+}
+
+.badge.light {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.combo-all-negative {
+  margin: 6px 0 8px;
+  font-weight: 600;
 }
 
 .combo-corner,

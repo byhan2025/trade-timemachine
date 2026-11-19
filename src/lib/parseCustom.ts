@@ -52,12 +52,16 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
 
   // 1) 달력에 없는 날짜·시각은 조용히 버리지 않고 명시적으로 알린다.
   if (parsed.badStamps.length) {
-    const head = parsed.badStamps.slice(0, MAX_SHOWN).join(" / ");
+    const lines = parsed.badStamps.slice(0, MAX_SHOWN).map((t) => `· 존재하지 않는 날짜·시각: ${t}`);
     const rest =
-      parsed.badStamps.length > MAX_SHOWN ? ` 외 ${parsed.badStamps.length - MAX_SHOWN}건` : "";
+      parsed.badStamps.length > MAX_SHOWN ? `외 ${parsed.badStamps.length - MAX_SHOWN}건` : "";
     throw new Error(
-      `데이터를 적용하지 않았습니다. 존재하지 않는 날짜·시각: ${head}${rest}. ` +
-        "2026-02-30처럼 달력에 없는 날짜나 25:00처럼 없는 시각은 쓸 수 없습니다. 실제 날짜와 00:00~23:59 시각을 넣어 주세요."
+      [
+        "데이터를 적용하지 않았습니다.",
+        ...lines,
+        ...(rest ? [rest] : []),
+        "2026-02-30처럼 달력에 없는 날짜나 25:00처럼 없는 시각은 쓸 수 없습니다. 실제 날짜와 00:00~23:59 시각을 넣어 주세요.",
+      ].join("\n")
     );
   }
   if (!rows.length) throw new Error("유효한 봉을 읽지 못했습니다. 형식을 확인해 주세요.");
@@ -65,10 +69,15 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
   // 2) 값 검증(정렬 전 원본 순서로 중복·역순까지 확인) — 문제가 있으면 적용하지 않는다.
   const problems = validateRows(rows);
   if (problems.length) {
-    const head = problems.slice(0, MAX_SHOWN).join(" / ");
-    const rest = problems.length > MAX_SHOWN ? ` 외 ${problems.length - MAX_SHOWN}건` : "";
+    const lines = problems.slice(0, MAX_SHOWN).map((p) => `· ${p}`);
+    const rest = problems.length > MAX_SHOWN ? `외 ${problems.length - MAX_SHOWN}건` : "";
     throw new Error(
-      `데이터를 적용하지 않았습니다. ${head}${rest}. 값을 고친 뒤 다시 [적용하기]를 눌러 주세요.`
+      [
+        "데이터를 적용하지 않았습니다.",
+        ...lines,
+        ...(rest ? [rest] : []),
+        "값을 고친 뒤 다시 [적용하기]를 눌러 주세요.",
+      ].join("\n")
     );
   }
 
@@ -127,12 +136,16 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
       const idx = at >= 0 ? at : Math.min(templateTimes.length, list.length) - 1;
       return `${d} ${idx + 1}번째 봉이 ${templateTimes[idx] ?? "?"} 대신 ${list[idx]?.time ?? "?"}`;
     });
-    const rest = misaligned.length > detail.length ? ` 외 ${misaligned.length - detail.length}일` : "";
+    const rest = misaligned.length > detail.length ? `외 ${misaligned.length - detail.length}일` : "";
     throw new Error(
-      `데이터를 적용하지 않았습니다. 세션마다 봉 시각이 다릅니다: ${detail.join(" / ")}${rest}. ` +
+      [
+        "데이터를 적용하지 않았습니다. 세션마다 봉 시각이 다릅니다.",
+        ...detail.map((d) => `· ${d}`),
+        ...(rest ? [rest] : []),
         `모든 거래일의 봉 시각(HH:MM)이 같은 순서로 같아야 합니다(기준 ${sessionBars}봉: ${
           templateTimes[0]
-        }~${templateTimes[templateTimes.length - 1]}).`
+        }~${templateTimes[templateTimes.length - 1]}).`,
+      ].join("\n")
     );
   }
   const dates = candidates;

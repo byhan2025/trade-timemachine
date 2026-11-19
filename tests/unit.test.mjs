@@ -295,6 +295,26 @@ test("온도계 문구: ± 없이 일중 고저폭으로 쓰고 방향·경로�
   assert.ok(t.avgBarRangePct > 0 && t.avgBarRangePct < t.maxRangePct);
 });
 
+
+test("오류 여러 건은 슬래시가 아니라 항목별 줄로 나열한다", () => {
+  const rows = baseRows(3);
+  rows[1] = [rows[1][0], 0, 101, 99, 100, 1000];
+  rows[2] = [rows[2][0], 100, 99, 101, 100, 1000];
+  let message = "";
+  try {
+    parseCustom(csv(rows));
+  } catch (e) {
+    message = e.message;
+  }
+  assert.ok(message.length > 0);
+  const items = message.split("\n").filter((line) => line.startsWith("· "));
+  assert.ok(items.length >= 2, message);
+  assert.ok(message.startsWith("데이터를 적용하지 않았습니다.\n"), message);
+  // 두 오류가 한 줄에 슬래시로 붙어 나오지 않는다
+  assert.ok(!/봉: [^\n]*\/ [^\n]*봉:/.test(message), message);
+  assert.ok(message.endsWith("값을 고친 뒤 다시 [적용하기]를 눌러 주세요."), message);
+});
+
 /* ---------------------------------------------------------------- 계측 */
 
 function datasetFor(days = 30, bars = 24) {
