@@ -1,5 +1,5 @@
 import type { SimResult } from "./simulate";
-import { formatPct, formatPrice, formatR } from "./format";
+import { formatNumber, formatPct, formatPrice, formatR } from "./format";
 import { GREEN_LABEL } from "./terms";
 
 /** 초보자가 5초에 읽는 요약 3줄에 필요한 값만 받는다 */
@@ -75,7 +75,8 @@ function thirdLine(s: SummaryInput): string {
   const greenOnly = Math.max(0, s.sim.pGreen - s.sim.pTarget);
   return `${GREEN_LABEL} ${formatPct(s.sim.pGreen)}(목표 도달 ${formatPct(
     s.sim.pTarget
-  )} + 목표 미도달 유리 마감 ${formatPct(greenOnly)}), 손익비 1:${(s.rr || 0).toFixed(
+  )} + 목표 미도달 유리 마감 ${formatPct(greenOnly)}), 손익비 1:${formatNumber(
+    s.rr || 0,
     2
   )} 구조입니다. 남은 ${s.sim.barsLeft}봉을 과거 봉 분포로 ${s.sim.replays.toLocaleString(
     "ko-KR"

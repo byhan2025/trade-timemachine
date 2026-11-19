@@ -98,7 +98,8 @@ export function formatMoneySigned(x: number, unit: string): string {
 }
 
 export function formatR(x: number): string {
-  return `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x).toFixed(2)}R`;
+  // 큰 R(예: 극단 입력의 +10,000R)도 세 자리 쉼표로 읽는다
+  return `${x > 0 ? "+" : x < 0 ? "−" : ""}${formatNumber(Math.abs(x), 2)}R`;
 }
 
 export function priceLabel(x: number, unit: string): string {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ComboCell, ComboResult } from "../lib/combos";
 import { pickBestCell } from "../lib/combos";
-import { formatPct, formatPrice, formatR } from "../lib/format";
+import { formatNumber, formatPct, formatPrice, formatR } from "../lib/format";
 import {
   COMBO_MODES,
   GREEN_LABEL,
@@ -125,7 +125,7 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
                   title={`손절 ${formatPrice(cell.stop, unit)} · 목표 ${formatPrice(
                     cell.target,
                     unit
-                  )} · ${GREEN_LABEL} ${formatPct(cell.pGreen)} · 평균 R ${cell.avgR.toFixed(2)}`}
+                  )} · ${GREEN_LABEL} ${formatPct(cell.pGreen)} · 평균 R ${formatR(cell.avgR)}`}
                 >
                   {best && !allNegative && (
                     <span className="combo-best-star" aria-hidden="true">
@@ -135,7 +135,7 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
                   <strong>{formatPct(cell.pGreen)}</strong>
                   <span className={cell.avgR >= 0 ? "pos" : "neg"}>
                     {cell.avgR >= 0 ? "+" : "−"}
-                    {Math.abs(cell.avgR).toFixed(2)}R
+                    {formatNumber(Math.abs(cell.avgR), 2)}R
                   </span>
                 </button>
               );

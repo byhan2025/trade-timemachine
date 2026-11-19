@@ -27,7 +27,7 @@ export function SizingCard({ size, unit, account, riskPct }: Props) {
         </div>
         <div>
           <dt>손익비 (R:R)</dt>
-          <dd>1 : {size.rr.toFixed(2)}</dd>
+          <dd>1 : {formatNumber(size.rr, 2)}</dd>
         </div>
         <div className="kv-highlight">
           <dt>손실 한도 기준 계산 수량(참고)</dt>
