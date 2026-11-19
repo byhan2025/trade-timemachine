@@ -54,9 +54,9 @@ export function SizingCard({ size, unit, account, riskPct }: Props) {
         </div>
         <div>
           <dt>기댓값 (참고치)</dt>
-          <dd className={size.expectedValue >= 0 ? "pos" : "neg"}>
+          <dd className="kv-neutral" data-testid="expected-value">
             {formatMoneySigned(size.expectedValue, unit)}
-            <span className="muted small"> · 수량 × 위험폭 × 평균 R</span>
+            <span className="kv-sub">과거 평균 R 단순 곱 · 수수료·세금·갭 미반영</span>
           </dd>
         </div>
         <div data-testid="position-value-row">

@@ -1809,6 +1809,12 @@ a:focus-visible {
   line-height: 1.4;
 }
 
+/* 기도값은 수익 예상으로 읽히지 않게 초록/빨강 대신 중립 진회색으로 (4호 봇 지적) */
+.sizing-kv dd.kv-neutral,
+.sizing-kv dd.kv-neutral strong {
+  color: #475569;
+}
+
 .denom-note {
   margin-top: 0;
   word-break: keep-all;

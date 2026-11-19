@@ -165,16 +165,14 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
         ) : (
           <>
             칸을 누르면 손절가·목표가까지 표시됩니다. 각 칸은 <strong>이익 마감 비율</strong>(승률)과{" "}
-            <strong>1회 평균 R</strong>입니다. {mode === "winrate"
-              ? "승률이 가장 높은 칸"
-              : "평균 R이 가장 높은 칸"}
-            에 표시가 붙습니다.
+            <strong>1회 평균 R</strong>입니다. <strong>{bestBadge}</strong> 배지가 붙은 칸이 표 아래에
+            한 줄로 요약되며(파란 테두리), 회색으로 채워진 칸은 방금 누른 칸입니다.
           </>
         )}
       </p>
       <p className="footnote">
-        성향에 맞는 구간을 골라 주는 <strong>과거 통계 비교</strong>이며 추천가·매수 신호가
-        아닙니다. 손절이 넓을수록 승률은 오르지만 1회 손실 금액도 커집니다.
+        설정한 조건별로 과거 통계를 비교한 참고표이며 추천가·매수 신호가 아닙니다. 손절 폭과 목표
+        배수에 따라 이익 마감 비율과 1회 손실 금액이 달라집니다.
       </p>
     </div>
   );
