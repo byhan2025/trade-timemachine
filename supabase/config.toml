@@ -1,0 +1,11 @@
+# stock-bars 전용 최소 설정 (기존 bojang-guide 설정과 같은 프로젝트를 쓴다)
+#
+#   supabase link --project-ref ntfhdiujapctomzzaifu
+#   supabase functions deploy stock-bars --no-verify-jwt
+#
+# 정적 페이지에서 키 없이 부르는 공개 시세 중계이므로 JWT 검증을 끈다(비밀키 없음).
+
+project_id = "trade-timemachine"
+
+[functions.stock-bars]
+verify_jwt = false
