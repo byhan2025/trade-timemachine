@@ -13,7 +13,7 @@
  * gh-pages 같은 외부 패키지 없이 git 만으로 동작하도록 만들었다.
  */
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -76,18 +76,17 @@ if (hasRemoteBranch) {
   git(["worktree", "add", "-B", "gh-pages", tmpDir, "origin/gh-pages"]);
 } else {
   console.log("origin/gh-pages 가 없어 새 브랜치를 만듭니다.");
-  git(["worktree", "add", "--detach", tmpDir]);
+  git(["worktree", "add", "--detach", tmpDir, "HEAD"]);
   git(["-C", tmpDir, "checkout", "--orphan", "gh-pages"]);
-  git(["-C", tmpDir, "rm", "-r", "--cached", ".", "--quiet"]);
 }
 
-/* 4. dist 내용만 남긴다 -------------------------------------------------- */
-for (const entry of ["assets", "samples", "index.html", "favicon.svg", "404.html"]) {
+/* 4. gh-pages 에는 dist 산출물만 올린다 ---------------------------------- */
+for (const entry of readdirSync(tmpDir)) {
+  if (entry === ".git") continue;
   rmSync(join(tmpDir, entry), { recursive: true, force: true });
 }
 cpSync(distDir, tmpDir, { recursive: true });
 writeFileSync(join(tmpDir, ".nojekyll"), "");
-mkdirSync(join(tmpDir, "samples"), { recursive: true });
 
 const stamp = new Date().toISOString().replace("T", " ").slice(0, 19);
 git(["-C", tmpDir, "add", "-A"]);
