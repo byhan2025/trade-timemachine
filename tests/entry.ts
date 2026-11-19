@@ -7,5 +7,6 @@ export { buildPool } from "../src/lib/pool";
 export { simulate } from "../src/lib/simulate";
 export { historyReplay } from "../src/lib/backtest";
 export { buildThermometer } from "../src/lib/thermometer";
+export { sizePosition, SHORT_DISCLOSURE } from "../src/lib/sizing";
 export { buildStopLevels, compareCombos } from "../src/lib/combos";
 export { simulateSurvival } from "../src/lib/survival";

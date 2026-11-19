@@ -18,8 +18,9 @@ function useWidth<T extends HTMLElement>() {
 
 /**
  * 🌡️ 오늘의 흔들림 온도계
- * - 위: 평균 하루 변동폭 vs 내 손절폭 게이지
- * - 아래: 최근 세션별 장중 변동폭 막대 + 내 손절선
+ * - 위: 평균 일중 고저폭(고가−저가 전체 범위) vs 내 손절폭 게이지
+ * - 아래: 최근 세션별 일중 고저폭 막대 + 내 손절선
+ * 고저폭은 위아래로 움직인 전체 범위라 '±'를 붙이지 않는다(방향을 구분하지 않음).
  */
 export function ThermometerView({ thermo }: { thermo: Thermometer }) {
   const { ref, width } = useWidth<HTMLDivElement>();
@@ -52,21 +53,21 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
     <div className="thermo" data-testid="thermometer">
       <div className="thermo-gauge">
         <div className="thermo-row">
-          <span className="thermo-row-label">평소 하루 변동폭</span>
+          <span className="thermo-row-label">평균 일중 고저폭</span>
           <div className="thermo-track">
             <span className="thermo-fill avg" style={{ width: `${avgW}%` }} />
           </div>
-          <strong className="thermo-row-value">±{thermo.avgRangePct.toFixed(2)}%</strong>
+          <strong className="thermo-row-value">{thermo.avgRangePct.toFixed(2)}%</strong>
         </div>
         {hasRemain && (
           <div className="thermo-row">
             <span className="thermo-row-label">
-              진입 후 남은 {thermo.remainBars}봉
+              진입 후 남은 {thermo.remainBars}봉 고저폭
             </span>
             <div className="thermo-track">
               <span className="thermo-fill remain" style={{ width: `${remainW}%` }} />
             </div>
-            <strong className="thermo-row-value">±{thermo.remainMedianPct.toFixed(2)}%</strong>
+            <strong className="thermo-row-value">{thermo.remainMedianPct.toFixed(2)}%</strong>
           </div>
         )}
         <div className="thermo-row">
@@ -77,7 +78,7 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           <strong className="thermo-row-value">{stopLine.toFixed(2)}%</strong>
         </div>
         <p className="thermo-ratio">
-          <span className={`thermo-badge ${thermo.band}`}>손절 ÷ 하루 변동폭 = {thermo.ratio.toFixed(2)}배</span>
+          <span className={`thermo-badge ${thermo.band}`}>손절 ÷ 평균 고저폭 = {thermo.ratio.toFixed(2)}배</span>
           {hasRemain && (
             <span className="thermo-badge light">
               남은 구간 대비 {thermo.remainRatio.toFixed(2)}배
@@ -96,11 +97,11 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           height={H}
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`최근 ${thermo.sessions}세션 장중 변동폭 막대. 평균 ±${thermo.avgRangePct.toFixed(
+          aria-label={`최근 ${thermo.sessions}세션 일중 고저폭 막대. 평균 일중 고저폭 ${thermo.avgRangePct.toFixed(
             2
           )}%, 내 손절 ${stopLine.toFixed(2)}%.`}
         >
-          <title>세션별 장중 변동폭과 내 손절폭</title>
+          <title>세션별 일중 고저폭과 내 손절폭</title>
           <rect x={0} y={0} width={W} height={H} fill="#ffffff" />
           {[0, 0.5, 1].map((f) => {
             const v = maxY * f;
@@ -174,20 +175,25 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
 
       <p className="thermo-headline">{thermo.headline}</p>
       <p className="thermo-verdict">{thermo.verdict}</p>
-      <ul className="thermo-facts">
-        <li>중앙 세션 변동폭 ±{thermo.medianRangePct.toFixed(2)}%</li>
+      <ul className="thermo-facts" data-testid="thermo-facts">
+        <li>중앙 세션 일중 고저폭 {thermo.medianRangePct.toFixed(2)}%</li>
         <li>
-          가장 조용한 날 ±{thermo.minRangePct.toFixed(2)}% · 가장 거친 날 ±
+          가장 좁은 날 {thermo.minRangePct.toFixed(2)}% · 가장 넓은 날{" "}
           {thermo.maxRangePct.toFixed(2)}%
         </li>
-        <li>분봉 한 개 평균 진폭(ATR) {thermo.avgAtrPct.toFixed(2)}%</li>
+        <li>분봉 한 개 평균 고저폭 {thermo.avgBarRangePct.toFixed(2)}%</li>
         {hasRemain && (
           <li>
-            진입 후 남은 {thermo.remainBars}봉 변동폭 중앙 ±{thermo.remainMedianPct.toFixed(2)}% (내
+            진입 후 남은 {thermo.remainBars}봉 고저폭 중앙 {thermo.remainMedianPct.toFixed(2)}% (내
             손절의 {thermo.remainRatio.toFixed(2)}배)
           </li>
         )}
       </ul>
+      <p className="footnote thermo-caveat">
+        일중 고저폭은 그날 고가와 저가 사이의 전체 범위입니다. 시가 대비 위아래로 얼마나 벌어졌는지
+        (방향)와 진입 후 어떤 경로로 움직였는지는 구분하지 않으므로, 손절 체결 가능성의 참고 지표로만
+        보세요.
+      </p>
     </div>
   );
 }

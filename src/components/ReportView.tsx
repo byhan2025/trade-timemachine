@@ -170,10 +170,11 @@ export function ReportView({ run, stale, onBack }: Props) {
           <h3 className="card-title" id="rep-thermo">
             2. 🌡️ 오늘의 흔들림 온도계
           </h3>
-          <span className="badge">평균 변동폭 vs 내 손절폭</span>
+          <span className="badge">평균 고저폭 vs 내 손절폭</span>
         </div>
         <p className="card-desc">
-          최근 {thermo.sessions}세션의 장중 평균 변동폭과 내 손절폭을 나란히 놓고 비교했습니다.
+          최근 {thermo.sessions}세션의 일중 고저폭(고가−저가 전체 범위) 평균과 내 손절폭을 나란히
+          놓고 비교했습니다.
         </p>
         <ThermometerView thermo={thermo} />
       </section>

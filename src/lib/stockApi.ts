@@ -17,6 +17,13 @@ export const STOCK_API_URL: string = (() => {
 export const RELAY_OFFLINE_MESSAGE =
   "실시간 시세 서버 연결 대기 중 — 내장 5종목 및 CSV/JSON 붙여넣기는 즉시 사용 가능";
 
+/** 실시간 검색 영역에 늘 보이는 기본 상태 문구(대기 중) */
+export const RELAY_PENDING_NOTE =
+  "서버 토큰 연동 대기 중 — 현재는 내장 5종목·CSV/JSON 즉시 사용 가능";
+
+/** 실시간 검색 영역에 보이는 서버 상태 */
+export type RelayState = "ready" | "offline";
+
 export type StockErrorKind =
   | "offline"
   | "timeout"
@@ -63,6 +70,39 @@ export interface BarsOutcome {
 }
 
 const TIMEOUT_MS = 15000;
+/** 앱을 열 때 서버 상태를 확인하는 짧은 요청의 제한 시간 */
+const PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * 중계 서버가 지금 응답하는지 확인한다(사용자가 검색을 누르기 전 상태 표시용).
+ * - 200 + JSON(health) → ready
+ * - 게이트웨이가 함수를 찾지 못함(NOT_FOUND 404) · 5xx · 네트워크 실패 → offline
+ * 응답에는 URL·토큰을 남기지 않고 상태값만 돌려준다.
+ */
+export async function probeRelay(signal?: AbortSignal): Promise<RelayState> {
+  if (signal?.aborted) return "offline";
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort);
+  try {
+    const res = await fetch(`${STOCK_API_URL}?health=1`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+      mode: "cors",
+      cache: "no-store",
+    });
+    if (!res.ok) return "offline";
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; kind?: string } | null;
+    return body && body.ok !== false ? "ready" : "offline";
+  } catch {
+    return "offline";
+  } finally {
+    window.clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
 
 function describeStatus(status: number): StockApiError {
   if (status === 404) {

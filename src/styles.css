@@ -952,6 +952,50 @@ a:focus-visible {
   margin: 8px 0 0;
 }
 
+/* 실시간 검색 영역 상단의 서버 상태 안내 (대기 중 / 연결됨) */
+.relay-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  background: #f8fafc;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.relay-note .relay-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+
+.relay-note.checking .relay-dot {
+  background: #cbd5e1;
+}
+
+.relay-note.ready {
+  border-style: solid;
+  border-color: var(--target-line);
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.relay-note.ready .relay-dot {
+  background: #16a34a;
+}
+
+.relay-note.offline .relay-dot {
+  background: #94a3b8;
+}
+
 .live-status {
   border-radius: 12px;
   padding: 10px 12px;

@@ -59,15 +59,24 @@ export function SizingCard({ size, unit, account, riskPct }: Props) {
             <span className="muted small"> · 수량 × 위험폭 × 평균 R</span>
           </dd>
         </div>
-        <div>
-          <dt>매수 금액</dt>
-          <dd>{moneyLabel(size.cost, unit)}</dd>
+        <div data-testid="position-value-row">
+          <dt>{size.positionLabel}</dt>
+          <dd>
+            {moneyLabel(size.cost, unit)}
+            {size.disclosure && (
+              <span className="kv-sub" data-testid="sell-disclosure">
+                {size.disclosure}
+              </span>
+            )}
+          </dd>
         </div>
       </dl>
       <p className="footnote">
         계좌 {moneyLabel(account, unit)} × 1회 허용 손실 {riskPct}% = {moneyLabel(size.lossBudget, unit)}을
         넘지 않도록 정수 주로 내림한 <strong>계산 예시</strong>입니다. 실제 체결 가격·수수료·세금에 따라
         달라지며, 기댓값은 과거 봉 분포의 평균 R일 뿐 미래 수익이 아닙니다.
+        {size.side === "sell" &&
+          " 매도 가정은 공매도 증거금·대주 가능 여부·수수료/이자를 반영하지 않은 현금 한도 기준 참고 수량입니다."}
       </p>
       {size.warnings.length > 0 && (
         <ul className="warn-list">

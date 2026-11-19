@@ -9,6 +9,8 @@ import {
   buildStopLevels,
   compareCombos,
   simulateSurvival,
+  sizePosition,
+  SHORT_DISCLOSURE,
 } from "./.build/lib.mjs";
 
 /* ---------------------------------------------------------------- helpers */
@@ -159,6 +161,124 @@ test("일봉(하루 1봉)만 있으면 분봉이 필요하다고 알린다", () 
   const rows = [];
   for (let d = 1; d <= 10; d++) rows.push([`2026-11-${String(d).padStart(2, "0")}`, 100, 101, 99, 100.5, 1000]);
   assert.throws(() => parseCustom(csv(rows)), /분봉/);
+});
+
+/* ---------------------------------------------------------------- v2.1.1 파서 엄격 검증 */
+
+test("달력에 없는 날짜(2026-02-30)는 명시적 오류로 차단한다", () => {
+  const rows = baseRows(3);
+  rows[2] = [`2026-02-30 09:00`, 102, 103, 101, 102.2, 1000];
+  assert.throws(
+    () => parseCustom(csv(rows)),
+    (e) => /존재하지 않는 날짜·시각/.test(e.message) && /2026-02-30/.test(e.message)
+  );
+});
+
+test("달력에 없는 날짜(2025-02-29, 윤년 아님)도 차단한다", () => {
+  const rows = baseRows(3);
+  rows[0] = ["2025-02-29 09:00", 100, 101, 99, 100.4, 1000];
+  assert.throws(() => parseCustom(csv(rows)), /존재하지 않는 날짜·시각/);
+});
+
+test("없는 시각(25:00)은 명시적 오류로 차단한다", () => {
+  const rows = baseRows(3);
+  rows[1] = ["2026-11-01 25:00", 101, 102, 100, 101.4, 1000];
+  assert.throws(
+    () => parseCustom(csv(rows)),
+    (e) => /존재하지 않는 날짜·시각/.test(e.message) && /25:00/.test(e.message)
+  );
+});
+
+test("없는 분(09:75)도 차단한다", () => {
+  const rows = baseRows(3);
+  rows[1] = ["2026-11-01 09:75", 101, 102, 100, 101.4, 1000];
+  assert.throws(() => parseCustom(csv(rows)), /존재하지 않는 날짜·시각/);
+});
+
+test("문자 섞인 숫자(100abc)는 조용히 100이 되지 않고 차단한다", () => {
+  const rows = baseRows(3);
+  rows[2] = [rows[2][0], "100abc", 101, 99, 100, 1000];
+  assert.throws(
+    () => parseCustom(csv(rows)),
+    (e) => /숫자 형식이 잘못된 값/.test(e.message) && /"100abc"/.test(e.message) && /시가/.test(e.message)
+  );
+});
+
+test("공백이 섞인 숫자(1 00)와 단위 붙은 숫자(100원)도 차단한다", () => {
+  const rows = baseRows(3);
+  rows[1] = [rows[1][0], "1 00", 102, 100, 101, 1000];
+  assert.throws(() => parseCustom(csv(rows)), /숫자 형식이 잘못된 값/);
+  const rows2 = baseRows(3);
+  rows2[3] = [rows2[3][0], 101, 102, 100, "100원", 1000];
+  assert.throws(() => parseCustom(csv(rows2)), /숫자 형식이 잘못된 값/);
+});
+
+test("거래량에 문자가 섞이면 조용히 0으로 바꾸지 않고 차단한다", () => {
+  const rows = baseRows(3);
+  rows[4] = [rows[4][0], 100, 101, 99, 100.4, "12a0"];
+  assert.throws(
+    () => parseCustom(csv(rows)),
+    (e) => /숫자 형식이 잘못된 값/.test(e.message) && /거래량/.test(e.message)
+  );
+});
+
+test("천 단위 쉼표(1,000)는 정상 숫자로 인정한다", () => {
+  const rows = baseRows(3);
+  rows[0] = [rows[0][0], '"1,030"', '"1,031"', '"1,029"', '"1,030.5"', '"1,000"'];
+  const { dataset } = parseCustom(csv(rows));
+  assert.equal(dataset.sessions[0].bars[0][0], 1030);
+  assert.equal(dataset.sessions[0].bars[0][4], 1000);
+});
+
+test("세션마다 봉 시각 배열이 다르면 차단한다", () => {
+  const rows = baseRows(3);
+  // 2일째만 4번째 봉 시각을 09:15 → 09:20 으로 옮긴다(봉 개수는 4개로 같음)
+  rows[7] = ["2026-11-02 09:20", 103, 104, 102, 103.4, 1003];
+  assert.throws(
+    () => parseCustom(csv(rows)),
+    (e) =>
+      /세션마다 봉 시각이 다릅니다/.test(e.message) &&
+      /2026-11-02/.test(e.message) &&
+      /09:15 대신 09:20/.test(e.message)
+  );
+});
+
+test("봉 시각 배열이 모두 같으면 정상 적용한다", () => {
+  const { dataset } = parseCustom(csv(baseRows(3)));
+  assert.deepEqual(dataset.times, ["09:00", "09:05", "09:10", "09:15"]);
+  for (const s of dataset.sessions) assert.equal(s.bars.length, dataset.times.length);
+});
+
+/* ---------------------------------------------------------------- v2.1.1 수량 라벨·온도계 문구 */
+
+test("수량 라벨: 매수는 '가정 매수 금액', 매도는 '가정 포지션 금액' + 공매도 한계 고지", () => {
+  const base = { entry: 100, stop: 99, target: 102, account: 10_000_000, riskPct: 1, expectedR: 0.2 };
+  const buy = sizePosition({ ...base, side: "buy" });
+  const sell = sizePosition({ ...base, stop: 101, target: 98, side: "sell" });
+  assert.equal(buy.positionLabel, "가정 매수 금액");
+  assert.equal(buy.disclosure, null);
+  assert.equal(sell.positionLabel, "가정 포지션 금액");
+  assert.equal(sell.disclosure, SHORT_DISCLOSURE);
+  assert.match(sell.disclosure, /공매도 증거금·대주 가능 여부·수수료\/이자는 반영되지 않은 단순 현금 한도 기준 참고 수량입니다/);
+  assert.equal(sell.shares, buy.shares);
+  assert.equal(sell.cost, sell.shares * 100);
+});
+
+test("온도계 문구: ± 없이 일중 고저폭으로 쓰고 방향·경로를 단정하지 않는다", () => {
+  const d = datasetFor();
+  const t = buildThermometer(d, 0.01, 4);
+  assert.ok(!t.headline.includes("±"), t.headline);
+  assert.match(t.headline, /일중 고저폭/);
+  assert.ok(!t.verdict.includes("±"), t.verdict);
+  assert.ok(!/ATR/.test(t.verdict));
+  assert.match(
+    t.verdict,
+    new RegExp(
+      `일중 고저폭\\(고가−저가\\)이 내 손절폭보다 큰 날이 ${t.exceededSessions}일 있었으나, 고저폭은 방향과 진입 후 경로를 구분하지 않는 단순 참고 지표입니다\\. 실제 분포는 1만 번 재생·백테스트 결과를 기준으로 확인하세요\\.`
+    )
+  );
+  assert.ok(!/승률이 낮게 나오기 쉽습니다|손절이 잦게 잡힐 수 있습니다/.test(t.verdict));
+  assert.ok(t.avgBarRangePct > 0 && t.avgBarRangePct < t.maxRangePct);
 });
 
 /* ---------------------------------------------------------------- 계측 */

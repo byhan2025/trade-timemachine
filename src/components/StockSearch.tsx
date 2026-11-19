@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RELAY_OFFLINE_MESSAGE, searchStocks, StockApiError } from "../lib/stockApi";
-import type { StockHit } from "../lib/stockApi";
+import {
+  probeRelay,
+  RELAY_OFFLINE_MESSAGE,
+  RELAY_PENDING_NOTE,
+  searchStocks,
+  StockApiError,
+} from "../lib/stockApi";
+import type { RelayState, StockHit } from "../lib/stockApi";
 
 export interface StockPick {
   symbol: string;
@@ -38,6 +44,8 @@ export function StockSearch({ onPick, busy }: Props) {
   /** 키보드로 후보를 직접 옮겼는지 (안 옮겼으면 입력어와 정확히 맞는 후보를 우선) */
   const [navigated, setNavigated] = useState(false);
   const [searching, setSearching] = useState(false);
+  /** 중계 서버 상태 — 처음에는 '대기 중'으로 보이고, 확인된 응답이 있으면 '연결됨'으로 바뀐다 */
+  const [relay, setRelay] = useState<RelayState>("offline");
   const [status, setStatus] = useState<{ tone: "muted" | "error" | "ok"; text: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   /** Enter 로 조회를 걸어 두고 검색 결과를 기다리는 중인지 */
@@ -45,6 +53,19 @@ export function StockSearch({ onPick, busy }: Props) {
   const boxRef = useRef<HTMLDivElement | null>(null);
 
   const trimmed = query.trim();
+
+  /* 앱을 열면 중계 서버가 응답하는지 한 번 확인한다(응답하면 자동으로 정상 모드) */
+  useEffect(() => {
+    const ctrl = new AbortController();
+    let alive = true;
+    probeRelay(ctrl.signal).then((state) => {
+      if (alive) setRelay(state);
+    });
+    return () => {
+      alive = false;
+      ctrl.abort();
+    };
+  }, []);
 
   /* 바깥 클릭이면 후보 목록을 닫는다 */
   useEffect(() => {
@@ -80,6 +101,7 @@ export function StockSearch({ onPick, busy }: Props) {
           setActive(out.results.length ? 0 : -1);
           setNavigated(false);
           setSearching(false);
+          setRelay("ready");
           if (pendingRef.current) {
             // Enter 로 걸어 둔 조회: 정확히 맞는 후보(없으면 1번 후보)를 자동으로 불러온다
             pendingRef.current = false;
@@ -107,6 +129,7 @@ export function StockSearch({ onPick, busy }: Props) {
           setOpen(false);
           const offline =
             e instanceof StockApiError && (e.kind === "offline" || e.kind === "timeout");
+          if (offline) setRelay("offline");
           setStatus({
             tone: "error",
             text: offline ? RELAY_OFFLINE_MESSAGE : e instanceof Error ? e.message : "검색에 실패했습니다.",
@@ -181,6 +204,11 @@ export function StockSearch({ onPick, busy }: Props) {
 
   return (
     <div className="stock-search" ref={boxRef}>
+      <p className={`relay-note ${relay}`} data-testid="relay-status" role="status" aria-live="polite">
+        <span className="relay-dot" aria-hidden="true" />
+        {relay === "ready" && "실시간 시세 서버 연결됨 — 종목명·코드·티커로 바로 조회할 수 있습니다."}
+        {relay === "offline" && RELAY_PENDING_NOTE}
+      </p>
       <label className="field">
         <span className="field-label">
           실시간 종목 검색 <span className="muted small">(한국 종목명·코드 / 미국 티커)</span>

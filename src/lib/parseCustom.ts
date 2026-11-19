@@ -15,12 +15,16 @@ interface Row {
   l: number;
   c: number;
   v: number;
+  /** 엄격 숫자 검사에서 걸린 원문 값 (필드명 → 원문). 비어 있으면 정상 */
+  bad: { field: string; raw: string }[];
 }
 
 interface ParsedRows {
   rows: Row[];
   /** 날짜·시각을 읽지 못해 제외한 행 수 */
   skipped: number;
+  /** 달력에 없는 날짜이거나 00:00~23:59 밖 시각이라 거부한 원문 */
+  badStamps: string[];
 }
 
 const DATE_KEYS = ["date", "datetime", "time", "timestamp", "일자", "날짜", "시간", "일시", "시각", "체결시각"];
@@ -33,6 +37,11 @@ const VOLUME_KEYS = ["volume", "vol", "v", "거래량"];
 /** 오류 메시지에 한 번에 보여줄 문제 건수 */
 const MAX_SHOWN = 3;
 
+/** 숫자 하나로 인정하는 형식 — 100 · 100.5 · .5 · +3 · -2 (지수·문자·단위·공백 불가) */
+const NUM_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)$/;
+
+const FIELD_NAME: Record<string, string> = { o: "시가", h: "고가", l: "저가", c: "종가", v: "거래량" };
+
 /** 사용자가 붙여넣거나 올린 텍스트(CSV/JSON) -> 데이터셋 */
 export function parseCustom(text: string, name = "내 차트"): CustomParseResult {
   const raw = (text || "").trim();
@@ -40,9 +49,20 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
   const parsed =
     raw.startsWith("[") || raw.startsWith("{") ? parseJson(raw) : parseCsv(raw);
   const rows = parsed.rows;
+
+  // 1) 달력에 없는 날짜·시각은 조용히 버리지 않고 명시적으로 알린다.
+  if (parsed.badStamps.length) {
+    const head = parsed.badStamps.slice(0, MAX_SHOWN).join(" / ");
+    const rest =
+      parsed.badStamps.length > MAX_SHOWN ? ` 외 ${parsed.badStamps.length - MAX_SHOWN}건` : "";
+    throw new Error(
+      `데이터를 적용하지 않았습니다. 존재하지 않는 날짜·시각: ${head}${rest}. ` +
+        "2026-02-30처럼 달력에 없는 날짜나 25:00처럼 없는 시각은 쓸 수 없습니다. 실제 날짜와 00:00~23:59 시각을 넣어 주세요."
+    );
+  }
   if (!rows.length) throw new Error("유효한 봉을 읽지 못했습니다. 형식을 확인해 주세요.");
 
-  // 값 검증(정렬 전 원본 순서로 중복·역순까지 확인) — 문제가 있으면 적용하지 않는다.
+  // 2) 값 검증(정렬 전 원본 순서로 중복·역순까지 확인) — 문제가 있으면 적용하지 않는다.
   const problems = validateRows(rows);
   if (problems.length) {
     const head = problems.slice(0, MAX_SHOWN).join(" / ");
@@ -57,7 +77,7 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
   }
   rows.sort((a, b) => (a.date === b.date ? a.minutes - b.minutes : a.date < b.date ? -1 : 1));
 
-  // 날짜별로 묶고, 가장 흔한 봉 개수와 같은 '완전한 날'만 사용
+  // 3) 날짜별로 묶고, 가장 흔한 봉 개수와 같은 '완전한 날'만 후보로 둔다.
   const byDate = new Map<string, Row[]>();
   for (const r of rows) {
     if (!byDate.has(r.date)) byDate.set(r.date, []);
@@ -79,15 +99,46 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
     );
   }
 
-  const dates = [...byDate.keys()].filter((d) => byDate.get(d)!.length === sessionBars).sort();
-  if (dates.length < 3) {
+  const candidates = [...byDate.keys()].filter((d) => byDate.get(d)!.length === sessionBars).sort();
+  if (candidates.length < 3) {
     throw new Error(
-      `완전한 거래일이 ${dates.length}일뿐입니다. 같은 봉 개수로 끝나는 거래일이 최소 3일 필요합니다.`
+      `완전한 거래일이 ${candidates.length}일뿐입니다. 같은 봉 개수로 끝나는 거래일이 최소 3일 필요합니다.`
     );
   }
 
+  // 4) 봉 개수만 같다고 같은 세션이 아니다 — 봉 시각(HH:MM) 배열까지 모든 세션이 같아야 한다.
+  const sigOf = (d: string) => byDate.get(d)!.map((r) => r.time).join(",");
+  const sigCount = new Map<string, number>();
+  for (const d of candidates) sigCount.set(sigOf(d), (sigCount.get(sigOf(d)) ?? 0) + 1);
+  let chosenSig = sigOf(candidates[candidates.length - 1]);
+  let chosenCount = sigCount.get(chosenSig) ?? 0;
+  sigCount.forEach((n, s) => {
+    if (n > chosenCount) {
+      chosenSig = s;
+      chosenCount = n;
+    }
+  });
+  const templateTimes = chosenSig.split(",");
+  const misaligned = candidates.filter((d) => sigOf(d) !== chosenSig);
+  if (misaligned.length) {
+    const detail = misaligned.slice(0, 2).map((d) => {
+      const list = byDate.get(d)!;
+      const at = templateTimes.findIndex((t, i) => list[i]?.time !== t);
+      const idx = at >= 0 ? at : Math.min(templateTimes.length, list.length) - 1;
+      return `${d} ${idx + 1}번째 봉이 ${templateTimes[idx] ?? "?"} 대신 ${list[idx]?.time ?? "?"}`;
+    });
+    const rest = misaligned.length > detail.length ? ` 외 ${misaligned.length - detail.length}일` : "";
+    throw new Error(
+      `데이터를 적용하지 않았습니다. 세션마다 봉 시각이 다릅니다: ${detail.join(" / ")}${rest}. ` +
+        `모든 거래일의 봉 시각(HH:MM)이 같은 순서로 같아야 합니다(기준 ${sessionBars}봉: ${
+          templateTimes[0]
+        }~${templateTimes[templateTimes.length - 1]}).`
+    );
+  }
+  const dates = candidates;
+
   const template = byDate.get(dates[dates.length - 1])!;
-  const times = template.map((r) => r.time);
+  const times = templateTimes;
 
   const sessions: Session[] = dates.map((d) => {
     const list = byDate.get(d)!;
@@ -139,7 +190,7 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
       sessionsUsed: sessions.length,
       firstDate: sessions[0].date,
       lastDate: sessions[sessions.length - 1].date,
-      note: `사용자가 올린 데이터입니다. 값 검증(시가·고가·저가·종가 범위, 중복·역순 시각)을 통과한 봉 ${sessionBars}개 × ${sessions.length}일만 사용했습니다.`,
+      note: `사용자가 올린 데이터입니다. 값 검증(실제 달력 날짜·시각, 시가·고가·저가·종가 범위, 숫자 형식, 중복·역순 시각, 세션별 봉 시각 일치)을 통과한 봉 ${sessionBars}개 × ${sessions.length}일만 사용했습니다.`,
       sessionsDropped: undefined,
     },
     times,
@@ -174,6 +225,16 @@ function validateRows(rows: Row[]): string[] {
 
   for (const r of sorted) {
     const label = `${r.date} ${r.time}`.trim();
+    // 3-1) 숫자로 읽혔더라도 원문에 문자·단위·공백이 섞였으면 조용히 넘기지 않는다.
+    if (r.bad.length) {
+      for (const b of r.bad.slice(0, 2)) {
+        problems.push(
+          `숫자 형식이 잘못된 값: ${label} ${FIELD_NAME[b.field] ?? b.field} "${b.raw}" — ` +
+            "100·100.5처럼 숫자만 넣어 주세요(문자·단위·공백 불가)"
+        );
+      }
+      continue;
+    }
     const prices = [r.o, r.h, r.l, r.c];
     if (prices.some((v) => !isFinite(v))) {
       problems.push(
@@ -255,6 +316,7 @@ function parseJson(raw: string): ParsedRows {
         : null;
   if (!list) throw new Error("JSON은 봉 배열([...])이어야 합니다.");
   const rows: Row[] = [];
+  const badStamps: string[] = [];
   let skipped = 0;
   for (const item of list) {
     if (Array.isArray(item)) {
@@ -263,21 +325,31 @@ function parseJson(raw: string): ParsedRows {
         skipped++;
         continue;
       }
-      const { date, time, minutes } = splitStamp(String(item[0]));
-      if (!date) {
+      const stamp = splitStamp(String(item[0]));
+      if (stamp.bad) {
+        badStamps.push(stamp.bad);
+        continue;
+      }
+      if (!stamp.date) {
         skipped++;
         continue;
       }
-      const v = item.length > 5 ? num(item[5]) : 0;
+      const bad: Row["bad"] = [];
+      const o = readNum(item[1], "o", bad);
+      const h = readNum(item[2], "h", bad);
+      const l = readNum(item[3], "l", bad);
+      const c = readNum(item[4], "c", bad);
+      const v = item.length > 5 ? readNum(item[5], "v", bad) : 0;
       rows.push({
-        date,
-        time,
-        minutes,
-        o: num(item[1]),
-        h: num(item[2]),
-        l: num(item[3]),
-        c: num(item[4]),
+        date: stamp.date,
+        time: stamp.time,
+        minutes: stamp.minutes,
+        o,
+        h,
+        l,
+        c,
         v: isFinite(v) ? v : 0,
+        bad,
       });
     } else if (item && typeof item === "object") {
       const obj = item as Record<string, unknown>;
@@ -287,28 +359,39 @@ function parseJson(raw: string): ParsedRows {
         datePart && timePart
           ? `${datePart} ${timePart}`
           : (pick(obj, DATE_KEYS) ?? [datePart, timePart].filter(Boolean).join(" "));
-      const { date, time, minutes } = splitStamp(String(stampRaw ?? ""));
-      if (!date) {
+      const stamp = splitStamp(String(stampRaw ?? ""));
+      if (stamp.bad) {
+        badStamps.push(stamp.bad);
+        continue;
+      }
+      if (!stamp.date) {
         skipped++;
         continue;
       }
-      const v = num(pick(obj, VOLUME_KEYS) ?? 0);
+      const bad: Row["bad"] = [];
+      const rawV = pick(obj, VOLUME_KEYS);
+      const v = rawV === undefined ? 0 : readNum(rawV, "v", bad);
+      const o = readNum(pick(obj, OPEN_KEYS), "o", bad);
+      const h = readNum(pick(obj, HIGH_KEYS), "h", bad);
+      const l = readNum(pick(obj, LOW_KEYS), "l", bad);
+      const c = readNum(pick(obj, CLOSE_KEYS), "c", bad);
       rows.push({
-        date,
-        time,
-        minutes,
-        o: num(pick(obj, OPEN_KEYS)),
-        h: num(pick(obj, HIGH_KEYS)),
-        l: num(pick(obj, LOW_KEYS)),
-        c: num(pick(obj, CLOSE_KEYS)),
+        date: stamp.date,
+        time: stamp.time,
+        minutes: stamp.minutes,
+        o,
+        h,
+        l,
+        c,
         v: isFinite(v) ? v : 0,
+        bad,
       });
     } else {
       skipped++;
     }
   }
-  if (!rows.length) throw new Error("JSON에서 시가/고가/저가/종가를 찾지 못했습니다.");
-  return { rows, skipped };
+  if (!rows.length && !badStamps.length) throw new Error("JSON에서 시가/고가/저가/종가를 찾지 못했습니다.");
+  return { rows, skipped, badStamps };
 }
 
 function pick(obj: Record<string, unknown>, keys: string[]): unknown {
@@ -330,7 +413,9 @@ function parseCsv(raw: string): ParsedRows {
     .sort((a, b) => b[1] - a[1])[0][0];
 
   const first = splitLine(lines[0], delim);
-  const header = first.some((cell) => /[a-zA-Z가-힣]/.test(cell)) && isNaN(parseNum(first[1] ?? ""));
+  const firstStamp = splitStamp(first[0] ?? "");
+  // 첫 줄 첫 칸이 날짜로 읽히면 헤더가 아니라 데이터다.
+  const header = !firstStamp.date && !firstStamp.bad;
   const idx = { date: 0, time: -1, o: 1, h: 2, l: 3, c: 4, v: 5 };
   let start = 0;
   if (header) {
@@ -356,31 +441,43 @@ function parseCsv(raw: string): ParsedRows {
   }
 
   const rows: Row[] = [];
+  const badStamps: string[] = [];
   let skipped = 0;
   for (let i = start; i < lines.length; i++) {
     const cells = splitLine(lines[i], delim);
     if (!cells.length || cells.every((c) => !c.trim())) continue;
     let stamp = cells[idx.date] ?? "";
     if (idx.time >= 0 && cells[idx.time]) stamp = `${stamp} ${cells[idx.time]}`;
-    const { date, time, minutes } = splitStamp(stamp);
-    if (!date) {
+    const parsedStamp = splitStamp(stamp);
+    if (parsedStamp.bad) {
+      badStamps.push(parsedStamp.bad);
+      continue;
+    }
+    if (!parsedStamp.date) {
       skipped++;
       continue;
     }
-    const v = idx.v >= 0 ? num(cells[idx.v]) : 0;
+    const bad: Row["bad"] = [];
+    const o = readNum(cells[idx.o], "o", bad);
+    const h = readNum(cells[idx.h], "h", bad);
+    const l = readNum(cells[idx.l], "l", bad);
+    const c = readNum(cells[idx.c], "c", bad);
+    const rawV = idx.v >= 0 ? cells[idx.v] : undefined;
+    const v = rawV === undefined || rawV === "" ? 0 : readNum(rawV, "v", bad);
     rows.push({
-      date,
-      time,
-      minutes,
-      o: num(cells[idx.o]),
-      h: num(cells[idx.h]),
-      l: num(cells[idx.l]),
-      c: num(cells[idx.c]),
+      date: parsedStamp.date,
+      time: parsedStamp.time,
+      minutes: parsedStamp.minutes,
+      o,
+      h,
+      l,
+      c,
       v: isFinite(v) ? v : 0,
+      bad,
     });
   }
-  if (!rows.length) throw new Error("유효한 봉을 읽지 못했습니다. 형식을 확인해 주세요.");
-  return { rows, skipped };
+  if (!rows.length && !badStamps.length) throw new Error("유효한 봉을 읽지 못했습니다. 형식을 확인해 주세요.");
+  return { rows, skipped, badStamps };
 }
 
 function splitLine(line: string, delim: string): string[] {
@@ -404,42 +501,93 @@ function splitLine(line: string, delim: string): string[] {
   return out;
 }
 
-/** 숫자로 읽는다. 숫자가 하나도 없으면 NaN(=읽지 못함). */
+/**
+ * 숫자 하나를 엄격하게 읽는다. 숫자가 아니면 NaN.
+ * 문자·단위·공백이 섞인 값("100abc", "1 00", "100원")은 부분 숫자로 바꾸지 않고 NaN을 돌려준다.
+ * 천 단위 쉼표("1,000")는 형식으로 인정한다.
+ */
 function parseNum(x: string): number {
-  const cleaned = x.replace(/,/g, "").replace(/[^\d.+-]/g, "");
-  if (!/\d/.test(cleaned)) return NaN;
-  return Number(cleaned);
+  const s = String(x ?? "").trim().replace(/,/g, "");
+  if (!NUM_RE.test(s)) return NaN;
+  return Number(s);
 }
 
-function num(x: unknown): number {
-  if (typeof x === "number") return x;
-  return parseNum(String(x ?? ""));
+/** 값 읽기 + 원문이 숫자 형식이 아니면 bad에 기록 */
+function readNum(x: unknown, field: string, bad: { field: string; raw: string }[]): number {
+  if (typeof x === "number") {
+    if (!Number.isFinite(x)) bad.push({ field, raw: String(x) });
+    return x;
+  }
+  const text = String(x ?? "").trim();
+  if (!text) return NaN;
+  const v = parseNum(text);
+  if (Number.isNaN(v)) bad.push({ field, raw: text });
+  return v;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** 1-based 월의 마지막 날 (윤년 반영) */
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+interface Stamp {
+  date: string;
+  time: string;
+  minutes: number;
+  /** 날짜 모양이지만 달력에 없거나 시각이 범위를 벗어난 원문 */
+  bad?: string;
+}
+
 /** "2026-11-18 09:05", "2026/11/18 09:05:00", "20261118 0905", "2026-11-18T09:05" 등 */
-function splitStamp(text: string): { date: string; time: string; minutes: number } {
+function splitStamp(text: string): Stamp {
   const s = (text || "").trim().replace("T", " ");
   const m = s.match(
     /^(\d{4})[-./]?(\d{2})[-./]?(\d{2})(?:\s+(\d{1,2}):?(\d{2})(?::?(\d{2}))?)?/
   );
   if (m) {
-    const date = `${m[1]}-${m[2]}-${m[3]}`;
-    if (m[4] !== undefined) {
-      const hh = Number(m[4]);
-      const mm = Number(m[5]);
-      return { date, time: `${pad(hh)}:${pad(mm)}`, minutes: hh * 60 + mm };
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    const hasTime = m[4] !== undefined;
+    const hh = hasTime ? Number(m[4]) : 0;
+    const mm = hasTime ? Number(m[5]) : 0;
+    const ss = hasTime && m[6] !== undefined ? Number(m[6]) : 0;
+    if (!isRealDate(y, mo, d) || hh > 23 || mm > 59 || ss > 59) {
+      return { date: "", time: "", minutes: 0, bad: s };
     }
-    return { date, time: "00:00", minutes: 0 };
+    return {
+      date: `${m[1]}-${m[2]}-${m[3]}`,
+      time: `${pad(hh)}:${pad(mm)}`,
+      minutes: hh * 60 + mm,
+    };
   }
   // 11/18/2026 09:05 (미국식)
-  const us = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  const us = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (us) {
-    const date = `${us[3]}-${pad(Number(us[1]))}-${pad(Number(us[2]))}`;
+    const mo = Number(us[1]);
+    const d = Number(us[2]);
+    const y = Number(us[3]);
     const hh = us[4] !== undefined ? Number(us[4]) : 0;
     const mm = us[5] !== undefined ? Number(us[5]) : 0;
-    return { date, time: `${pad(hh)}:${pad(mm)}`, minutes: hh * 60 + mm };
+    const ss = us[6] !== undefined ? Number(us[6]) : 0;
+    if (!isRealDate(y, mo, d) || hh > 23 || mm > 59 || ss > 59) {
+      return { date: "", time: "", minutes: 0, bad: s };
+    }
+    return {
+      date: `${y}-${pad(mo)}-${pad(d)}`,
+      time: `${pad(hh)}:${pad(mm)}`,
+      minutes: hh * 60 + mm,
+    };
   }
   return { date: "", time: "", minutes: 0 };
+}
+
+/** 실제 달력에 있는 날짜인지 (2026-02-30, 2025-02-29 같은 값 거부) */
+function isRealDate(y: number, mo: number, d: number): boolean {
+  if (!Number.isInteger(y) || y < 1900 || y > 2200) return false;
+  if (!Number.isInteger(mo) || mo < 1 || mo > 12) return false;
+  if (!Number.isInteger(d) || d < 1 || d > lastDayOfMonth(y, mo)) return false;
+  return true;
 }
