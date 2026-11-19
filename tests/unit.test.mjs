@@ -1216,9 +1216,11 @@ test("v2.2.1 결함1: 극단 입력은 유리/손실 판정 대신 ⚪ 참고하
   });
   assert.equal(extreme.level, "neutral");
   assert.equal(extreme.badge, "⚪ 참고하기 어려워요");
-  // 이유를 3줄 결론에도 그대로 적는다
+  // 이유를 3줄 결론에도 그대로 적고, '이익/손실 쪽' 판정 문장은 쓰지 않는다
   assert.match(extreme.lines[2], /손절폭이 극단적으로 좁아 실제 체결·수수료 오차가 큽니다/);
   assert.match(extreme.lines[2], /참고하기 어려워요/);
+  assert.ok(!extreme.lines[2].includes("이익 쪽"), extreme.lines[2]);
+  assert.ok(!extreme.lines[2].includes("손실 쪽"), extreme.lines[2]);
   // 금액 칩도 '이익/손해' 판정을 하지 않는다
   assert.equal(
     easyMoneyChip({ avgR: 729.07, oneR: 1, unit: "원", shares: 100, extreme: true }),

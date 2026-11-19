@@ -239,10 +239,12 @@ export function easyConclusion(input: {
       : avgR > FLAT_R
         ? " 이길 때 버는 돈이 더 커서, 1번 평균은 이익 쪽이었어요."
         : " 이번에는 이익과 손실이 거의 반반이었어요.";
-  // 극단 입력: 계산된 결론 문장을 지우지 않되, 판정이 아니라 참고 불가임을 같은 줄에서 밝힌다.
-  const caution = extreme ? ` ${EXTREME_STOP_REASON} — 이 결론은 판정이 아니라 참고하기 어려워요.` : "";
+  // 극단 입력: '이익/손실 쪽'이라는 판정 문장을 쓰지 않고, 판정을 보류한 이유만 적는다(v2.2.1).
+  if (extreme) {
+    return `과거 ${sessions}일 흐름으로 ${replays.toLocaleString("ko-KR")}번 돌려보니, ${body} ${EXTREME_STOP_REASON} — 이 조건은 유리·손실을 판정하지 않고 '⚪ 참고하기 어려워요'로 표시했어요.`;
+  }
 
-  return `과거 ${sessions}일 흐름으로 ${replays.toLocaleString("ko-KR")}번 돌려보니, ${body}${tail}${caution}`;
+  return `과거 ${sessions}일 흐름으로 ${replays.toLocaleString("ko-KR")}번 돌려보니, ${body}${tail}`;
 }
 
 /** 쉬운 3줄 + 신호등을 한 번에 만든다 */
