@@ -16,6 +16,12 @@ function useWidth<T extends HTMLElement>() {
   return { ref, width };
 }
 
+/** 배율 표시 — 1,000배 이상은 세 자리 쉼표로 읽기 쉽게 쓴다 */
+function multipleText(v: number): string {
+  if (!isFinite(v)) return "-";
+  return v >= 1000 ? v.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : v.toFixed(2);
+}
+
 /**
  * 🌡️ 오늘의 흔들림 온도계
  * - 위: 평균 일중 고저폭(고가−저가 전체 범위) vs 내 손절폭 게이지
@@ -62,7 +68,7 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
         {hasRemain && (
           <div className="thermo-row">
             <span className="thermo-row-label">
-              진입 후 남은 {thermo.remainBars}봉 고저폭
+              남은 {thermo.remainBars}봉 고저폭
             </span>
             <div className="thermo-track">
               <span className="thermo-fill remain" style={{ width: `${remainW}%` }} />
@@ -80,8 +86,8 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
         <p className="thermo-ratio">
           <span className={`thermo-badge ${thermo.band}`}>손절 ÷ 평균 고저폭 = {thermo.ratio.toFixed(2)}배</span>
           {hasRemain && (
-            <span className="thermo-badge light">
-              남은 구간 대비 {thermo.remainRatio.toFixed(2)}배
+            <span className="thermo-badge light" data-testid="thermo-remain-badge">
+              손절 ÷ 남은 구간 = {multipleText(thermo.remainRatio)}배
             </span>
           )}
           <span className="muted small">
@@ -183,9 +189,9 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
         </li>
         <li>분봉 한 개 평균 고저폭 {thermo.avgBarRangePct.toFixed(2)}%</li>
         {hasRemain && (
-          <li>
+          <li data-testid="thermo-remain-fact">
             진입 후 남은 {thermo.remainBars}봉 고저폭 중앙 {thermo.remainMedianPct.toFixed(2)}% (내
-            손절의 {thermo.remainRatio.toFixed(2)}배)
+            손절의 {multipleText(thermo.remainMultipleStop)}배)
           </li>
         )}
       </ul>

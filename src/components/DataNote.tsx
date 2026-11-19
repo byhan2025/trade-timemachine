@@ -55,8 +55,11 @@ export function DataNote({ dataset, warnings }: { dataset: Dataset; warnings: st
         )}
       </dl>
       {m.sourceUrl && (
-        <p className="footnote break-all">
-          원본: <a href={m.sourceUrl} rel="noreferrer noopener" target="_blank">{m.sourceUrl}</a>
+        <p className="footnote source-link-row">
+          <span className="muted small">원본</span>
+          <a className="source-link" href={m.sourceUrl} rel="noreferrer noopener" target="_blank">
+            <span>{m.sourceUrl}</span>
+          </a>
         </p>
       )}
       <p className="footnote noncommercial">

@@ -25,6 +25,8 @@ interface ParsedRows {
   skipped: number;
   /** 달력에 없는 날짜이거나 00:00~23:59 밖 시각이라 거부한 원문 */
   badStamps: string[];
+  /** 날짜 모양은 맞지만 형식이 어긋난 원문(예: "2026-11-01 09:00x" · "2026-11-01 09:0x") */
+  badFormats: string[];
 }
 
 const DATE_KEYS = ["date", "datetime", "time", "timestamp", "일자", "날짜", "시간", "일시", "시각", "체결시각"];
@@ -36,6 +38,17 @@ const VOLUME_KEYS = ["volume", "vol", "v", "거래량"];
 
 /** 오류 메시지에 한 번에 보여줄 문제 건수 */
 const MAX_SHOWN = 3;
+
+/** 봉 간격이 일정하지 않을 때 화면에 쓰는 표기 */
+export const IRREGULAR_LABEL = "불규칙 봉";
+
+/** 시각 문자열 전체 매치용 — 앞뒤에 다른 글자가 붙으면 통과하지 않는다(예: 09:00x) */
+const STAMP_YMD_RE =
+  /^(\d{4})[-./]?(\d{2})[-./]?(\d{2})(?:[ T](\d{1,2}):?(\d{2})(?::?(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+const STAMP_US_RE =
+  /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+/** 날짜처럼 시작하지만 형식이 어그러진 문자열(예: "2026-11-18 09:00x") */
+const STAMP_LIKE_RE = /^(?:\d{4}[-./]?\d{2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4})/;
 
 /** 숫자 하나로 인정하는 형식 — 100 · 100.5 · .5 · +3 · -2 (지수·문자·단위·공백 불가) */
 const NUM_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)$/;
@@ -50,18 +63,26 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
     raw.startsWith("[") || raw.startsWith("{") ? parseJson(raw) : parseCsv(raw);
   const rows = parsed.rows;
 
-  // 1) 달력에 없는 날짜·시각은 조용히 버리지 않고 명시적으로 알린다.
-  if (parsed.badStamps.length) {
-    const lines = parsed.badStamps.slice(0, MAX_SHOWN).map((t) => `· 존재하지 않는 날짜·시각: ${t}`);
-    const rest =
-      parsed.badStamps.length > MAX_SHOWN ? `외 ${parsed.badStamps.length - MAX_SHOWN}건` : "";
+  // 1) 달력에 없는 날짜·시각, 뒤에 글자가 붙은 시각은 조용히 버리지 않고 명시적으로 알린다.
+  if (parsed.badStamps.length || parsed.badFormats.length) {
+    const stampLines = parsed.badStamps.map((t) => `· 존재하지 않는 날짜·시각: ${t}`);
+    const formatLines = parsed.badFormats.map((t) => `· 시각 형식이 잘못된 값: "${t}"`);
+    const shown = [...stampLines, ...formatLines];
+    const lines = shown.slice(0, MAX_SHOWN);
+    const rest = shown.length > MAX_SHOWN ? [`외 ${shown.length - MAX_SHOWN}건`] : [];
+    const advice: string[] = [];
+    if (parsed.badStamps.length) {
+      advice.push(
+        "2026-02-30처럼 달력에 없는 날짜나 25:00처럼 없는 시각은 쓸 수 없습니다. 실제 날짜와 00:00~23:59 시각을 넣어 주세요."
+      );
+    }
+    if (parsed.badFormats.length) {
+      advice.push(
+        "날짜·시각은 2026-11-18 09:05(또는 09:05:00) 형식으로 넣어 주세요. 시각 뒤에 글자·단위가 붙으면(예: 09:00x) 읽지 않습니다."
+      );
+    }
     throw new Error(
-      [
-        "데이터를 적용하지 않았습니다.",
-        ...lines,
-        ...(rest ? [rest] : []),
-        "2026-02-30처럼 달력에 없는 날짜나 25:00처럼 없는 시각은 쓸 수 없습니다. 실제 날짜와 00:00~23:59 시각을 넣어 주세요.",
-      ].join("\n")
+      ["데이터를 적용하지 않았습니다.", ...lines, ...rest, ...advice].join("\n")
     );
   }
   if (!rows.length) throw new Error("유효한 봉을 읽지 못했습니다. 형식을 확인해 주세요.");
@@ -158,7 +179,8 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
     return { date: d, bars: list.map((r) => [r.o, r.h, r.l, r.c, r.v]) };
   });
 
-  // 봉 간격 추정(분)
+  // 봉 간격 판별(분) — 연속 봉 간격이 '모두 같을 때만' N분봉이라고 부른다.
+  // 중복·역순 시각은 위에서 이미 차단했으므로 모든 간격은 양수다.
   const gaps = new Map<number, number>();
   for (let i = 1; i < template.length; i++) {
     const g = template[i].minutes - template[i - 1].minutes;
@@ -168,11 +190,20 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
   gaps.forEach((n, g) => {
     if (!bestGap || n > (gaps.get(bestGap) ?? 0)) bestGap = g;
   });
-  const gap = bestGap;
+  const regular = gaps.size === 1 && bestGap > 0;
+  const gapSummary = [...gaps.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([g, n]) => `${g}분 ${n}회`)
+    .join(", ");
 
   const warnings: string[] = [];
   if (sessions.length < 20) {
     warnings.push(`완전한 거래일이 ${sessions.length}일뿐이라 표본이 적습니다(권장 20일 이상).`);
+  }
+  if (!regular && bestGap > 0) {
+    warnings.push(
+      `봉 간격이 일정하지 않습니다(${gapSummary}). 이런 자료는 '${IRREGULAR_LABEL}'으로 표시하며, 15분 단위 범위 같은 봉 수 환산은 가장 흔한 간격(${bestGap}분)을 기준으로 계산합니다.`
+    );
   }
   if (parsed.skipped > 0) {
     warnings.push(`날짜·시각을 읽지 못한 ${parsed.skipped}개 행은 제외했습니다.`);
@@ -194,8 +225,10 @@ export function parseCustom(text: string, name = "내 차트"): CustomParseResul
     meta: {
       source: "사용자 업로드 데이터(CSV/JSON 붙여넣기 또는 파일)",
       fetchedAt: new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
-      interval: gap ? `${gap}분봉` : "봉 간격 미상",
-      intervalSeconds: gap ? gap * 60 : undefined,
+      interval: regular ? `${bestGap}분봉` : bestGap ? IRREGULAR_LABEL : "봉 간격 미상",
+      intervalSeconds: bestGap ? bestGap * 60 : undefined,
+      intervalRegular: regular,
+      gapSummary: gapSummary || undefined,
       barTimestampMeans: "입력한 시각",
       sessionStart: times[0] ?? "-",
       sessionEnd: times[times.length - 1] ?? "-",
@@ -330,6 +363,7 @@ function parseJson(raw: string): ParsedRows {
   if (!list) throw new Error("JSON은 봉 배열([...])이어야 합니다.");
   const rows: Row[] = [];
   const badStamps: string[] = [];
+  const badFormats: string[] = [];
   let skipped = 0;
   for (const item of list) {
     if (Array.isArray(item)) {
@@ -340,7 +374,7 @@ function parseJson(raw: string): ParsedRows {
       }
       const stamp = splitStamp(String(item[0]));
       if (stamp.bad) {
-        badStamps.push(stamp.bad);
+        (stamp.badKind === "format" ? badFormats : badStamps).push(stamp.bad);
         continue;
       }
       if (!stamp.date) {
@@ -374,7 +408,7 @@ function parseJson(raw: string): ParsedRows {
           : (pick(obj, DATE_KEYS) ?? [datePart, timePart].filter(Boolean).join(" "));
       const stamp = splitStamp(String(stampRaw ?? ""));
       if (stamp.bad) {
-        badStamps.push(stamp.bad);
+        (stamp.badKind === "format" ? badFormats : badStamps).push(stamp.bad);
         continue;
       }
       if (!stamp.date) {
@@ -403,8 +437,9 @@ function parseJson(raw: string): ParsedRows {
       skipped++;
     }
   }
-  if (!rows.length && !badStamps.length) throw new Error("JSON에서 시가/고가/저가/종가를 찾지 못했습니다.");
-  return { rows, skipped, badStamps };
+  if (!rows.length && !badStamps.length && !badFormats.length)
+    throw new Error("JSON에서 시가/고가/저가/종가를 찾지 못했습니다.");
+  return { rows, skipped, badStamps, badFormats };
 }
 
 function pick(obj: Record<string, unknown>, keys: string[]): unknown {
@@ -455,6 +490,7 @@ function parseCsv(raw: string): ParsedRows {
 
   const rows: Row[] = [];
   const badStamps: string[] = [];
+  const badFormats: string[] = [];
   let skipped = 0;
   for (let i = start; i < lines.length; i++) {
     const cells = splitLine(lines[i], delim);
@@ -463,7 +499,7 @@ function parseCsv(raw: string): ParsedRows {
     if (idx.time >= 0 && cells[idx.time]) stamp = `${stamp} ${cells[idx.time]}`;
     const parsedStamp = splitStamp(stamp);
     if (parsedStamp.bad) {
-      badStamps.push(parsedStamp.bad);
+      (parsedStamp.badKind === "format" ? badFormats : badStamps).push(parsedStamp.bad);
       continue;
     }
     if (!parsedStamp.date) {
@@ -489,8 +525,9 @@ function parseCsv(raw: string): ParsedRows {
       bad,
     });
   }
-  if (!rows.length && !badStamps.length) throw new Error("유효한 봉을 읽지 못했습니다. 형식을 확인해 주세요.");
-  return { rows, skipped, badStamps };
+  if (!rows.length && !badStamps.length && !badFormats.length)
+    throw new Error("유효한 봉을 읽지 못했습니다. 형식을 확인해 주세요.");
+  return { rows, skipped, badStamps, badFormats };
 }
 
 function splitLine(line: string, delim: string): string[] {
@@ -549,16 +586,19 @@ interface Stamp {
   date: string;
   time: string;
   minutes: number;
-  /** 날짜 모양이지만 달력에 없거나 시각이 범위를 벗어난 원문 */
+  /** 읽지 못한 원문 (badKind와 함께만 쓴다) */
   bad?: string;
+  /** value: 달력에 없거나 범위 밖 값 · format: 시각 형식이 아님(뒤에 글자가 붙음 등) */
+  badKind?: "value" | "format";
 }
 
-/** "2026-11-18 09:05", "2026/11/18 09:05:00", "20261118 0905", "2026-11-18T09:05" 등 */
+/**
+ * "2026-11-18 09:05", "2026/11/18 09:05:00", "20261118 0905", "2026-11-18T09:05" 등.
+ * 정규식을 문자열 전체에 적용해 "09:00x"처럼 뒤에 잔여 문자가 붙은 시각은 통과시키지 않는다.
+ */
 function splitStamp(text: string): Stamp {
   const s = (text || "").trim().replace("T", " ");
-  const m = s.match(
-    /^(\d{4})[-./]?(\d{2})[-./]?(\d{2})(?:\s+(\d{1,2}):?(\d{2})(?::?(\d{2}))?)?/
-  );
+  const m = s.match(STAMP_YMD_RE);
   if (m) {
     const y = Number(m[1]);
     const mo = Number(m[2]);
@@ -568,7 +608,7 @@ function splitStamp(text: string): Stamp {
     const mm = hasTime ? Number(m[5]) : 0;
     const ss = hasTime && m[6] !== undefined ? Number(m[6]) : 0;
     if (!isRealDate(y, mo, d) || hh > 23 || mm > 59 || ss > 59) {
-      return { date: "", time: "", minutes: 0, bad: s };
+      return { date: "", time: "", minutes: 0, bad: s, badKind: "value" };
     }
     return {
       date: `${m[1]}-${m[2]}-${m[3]}`,
@@ -577,7 +617,7 @@ function splitStamp(text: string): Stamp {
     };
   }
   // 11/18/2026 09:05 (미국식)
-  const us = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  const us = s.match(STAMP_US_RE);
   if (us) {
     const mo = Number(us[1]);
     const d = Number(us[2]);
@@ -586,13 +626,17 @@ function splitStamp(text: string): Stamp {
     const mm = us[5] !== undefined ? Number(us[5]) : 0;
     const ss = us[6] !== undefined ? Number(us[6]) : 0;
     if (!isRealDate(y, mo, d) || hh > 23 || mm > 59 || ss > 59) {
-      return { date: "", time: "", minutes: 0, bad: s };
+      return { date: "", time: "", minutes: 0, bad: s, badKind: "value" };
     }
     return {
       date: `${y}-${pad(mo)}-${pad(d)}`,
       time: `${pad(hh)}:${pad(mm)}`,
       minutes: hh * 60 + mm,
     };
+  }
+  // 날짜처럼 시작했는데 형식이 어그러진 경우 — 조용히 버리지 않고 형식 오류로 알린다.
+  if (STAMP_LIKE_RE.test(s)) {
+    return { date: "", time: "", minutes: 0, bad: s, badKind: "format" };
   }
   return { date: "", time: "", minutes: 0 };
 }

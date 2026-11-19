@@ -315,6 +315,110 @@ test("오류 여러 건은 슬래시가 아니라 항목별 줄로 나열한다"
   assert.ok(message.endsWith("값을 고친 뒤 다시 [적용하기]를 눌러 주세요."), message);
 });
 
+/* ---------------------------------------------------------------- v2.1.2 4호 봇 4건 */
+
+test("v2.1.2 시각: 뒤에 글자가 붙은 09:00x는 09:00으로 통과하지 않고 차단한다", () => {
+  const rows = baseRows(3);
+  rows[2] = ["2026-11-01 09:00x", 102, 103, 101, 102.2, 1000];
+  assert.throws(
+    () => parseCustom(csv(rows)),
+    (e) =>
+      /형식이 잘못된 값/.test(e.message) &&
+      /2026-11-01 09:00x/.test(e.message) &&
+      /시각 뒤에 글자·단위가 붙으면/.test(e.message) &&
+      !/존재하지 않는 날짜·시각/.test(e.message)
+  );
+});
+
+test("v2.1.2 시각: 초·밀리초·시간대 표기는 계속 읽는다(엄격하지만 실제 형식은 허용)", () => {
+  const forms = [
+    "2026-11-01 09:00",
+    "2026-11-01 09:00:00",
+    "2026-11-01 09:00:00.000",
+    "2026-11-01T09:00",
+    "2026-11-01T09:00:00+09:00",
+    "20261101 0900",
+    "2026/11/01 09:00",
+    "11/01/2026 09:00",
+  ];
+  for (const form of forms) {
+    const rows = baseRows(3);
+    rows[0] = [form, 100, 101, 99, 100.4, 1000];
+    const { dataset } = parseCustom(csv(rows), "형식");
+    assert.equal(dataset.times[0], "09:00", `${form} 를 읽지 못했습니다`);
+  }
+});
+
+test("v2.1.2 봉 간격: 5분 간격이 일정하면 '5분봉', 섞이면 '불규칙 봉'", () => {
+  const regular = parseCustom(csv(baseRows(3))).dataset;
+  assert.equal(regular.meta.interval, "5분봉");
+  assert.equal(regular.meta.intervalRegular, true);
+  assert.equal(regular.meta.intervalSeconds, 300);
+
+  // 09:00 · 09:05 · 10:00 · 10:05 — 간격이 5/55/5 로 섞인 자료
+  const rows = [];
+  for (let d = 1; d <= 3; d++) {
+    const date = `2026-11-${String(d).padStart(2, "0")}`;
+    const stamps = ["09:00", "09:05", "10:00", "10:05"];
+    stamps.forEach((t, i) => {
+      const o = 100 + d + i;
+      rows.push([`${date} ${t}`, o, o + 0.6, o - 0.6, o + 0.2, 1000 + i]);
+    });
+  }
+  const irregular = parseCustom(csv(rows));
+  assert.equal(irregular.dataset.meta.interval, "불규칙 봉");
+  assert.equal(irregular.dataset.meta.intervalRegular, false);
+  assert.match(irregular.dataset.meta.gapSummary, /5분 2회/);
+  assert.match(irregular.dataset.meta.gapSummary, /55분 1회/);
+  assert.ok(
+    irregular.warnings.some((w) => /봉 간격이 일정하지 않습니다/.test(w) && /불규칙 봉/.test(w)),
+    irregular.warnings.join(" / ")
+  );
+  // 최빈 간격(5분)은 남겨 두어 봉 수 환산이 5분 기준으로 동작한다
+  assert.equal(irregular.dataset.meta.intervalSeconds, 300);
+});
+
+test("v2.1.2 조합 수: 진입 100,000 / 손절 99,999.99는 중복 제거돼 3개 조합만 계산된다", () => {
+  const d = datasetFor();
+  const pool = buildPool(d.sessions, d.times.length);
+  const entry = 100_000;
+  const stop = 99_999.99;
+  const stopPct = Math.abs(entry - stop) / entry;
+  const levels = buildStopLevels(entry, stopPct, "원", "buy");
+  // 호가 단위(1원)에서 0.6배·1배·1.5배가 모두 같은 손절가로 반올림 → 중복 제거
+  assert.equal(levels.length, 1, `손절 단계 ${levels.length}개`);
+  const res = compareCombos({
+    pool,
+    entry,
+    side: "buy",
+    entryBar: 5,
+    levels,
+    replays: 200,
+    unit: "원",
+  });
+  assert.equal(res.cells.length, 3, `조합 ${res.cells.length}개`);
+  assert.equal(res.cells.length, levels.length * res.targetRs.length);
+  assert.equal(new Set(res.cells.map((c) => c.stopPct.toFixed(6))).size, 1);
+});
+
+test("v2.1.2 온도계 배율: 남은 구간은 '내 손절의 N배', 배지는 '손절 ÷ 남은 구간'으로 방향이 반대다", () => {
+  const d = datasetFor();
+  const stopPct = 0.01;
+  const t = buildThermometer(d, stopPct, 4);
+  assert.ok(t.remainMedianPct > 0);
+  const stopPctPct = stopPct * 100;
+  // 남은 구간 중앙값 ÷ 손절폭 — 문장에 쓰는 값(손절보다 넓으면 1보다 크다)
+  assert.ok(Math.abs(t.remainMultipleStop - t.remainMedianPct / stopPctPct) < 1e-9);
+  // 손절폭 ÷ 남은 구간 중앙값 — 배지에 쓰는 값
+  assert.ok(Math.abs(t.remainRatio - stopPctPct / t.remainMedianPct) < 1e-9);
+  assert.ok(Math.abs(t.remainRatio * t.remainMultipleStop - 1) < 1e-9);
+  // 두 값이 같으면(1배) 분자·분모를 착각해도 티가 안 나므로, 실제 예시로 검산한다.
+  // 남은 구간 2.75% · 손절 1.00% → 문장 2.75배, 배지 0.36배
+  const remain = 2.75;
+  assert.equal((remain / stopPctPct).toFixed(2), "2.75");
+  assert.equal((stopPctPct / remain).toFixed(2), "0.36");
+});
+
 /* ---------------------------------------------------------------- 계측 */
 
 function datasetFor(days = 30, bars = 24) {

@@ -25,8 +25,10 @@ export interface Thermometer {
   /** 진입 봉 이후 남은 구간(세션 고저폭 ÷ 진입가)의 중앙값·평균 (%) */
   remainMedianPct: number;
   remainAvgPct: number;
-  /** 손절폭 ÷ 남은 구간 중앙 고저폭 */
+  /** 손절폭 ÷ 남은 구간 중앙 고저폭 — '남은 구간 대비 내 손절은 몇 배인가' (손절이 좁으면 1 미만) */
   remainRatio: number;
+  /** 남은 구간 중앙 고저폭 ÷ 손절폭 — '남은 구간은 내 손절의 몇 배인가' (손절이 좁으면 1 초과) */
+  remainMultipleStop: number;
   /** 남은 봉 수 */
   remainBars: number;
   /** 내 손절폭(%) */
@@ -105,6 +107,7 @@ export function buildThermometer(
   const values = ranges.map((r) => r.rangePct);
   const avgRangePct = mean(values);
   const stopPctPct = stopPct * 100;
+  const remainMedianPct = quantile(remain, 0.5);
   const ratio = avgRangePct > 0 ? stopPctPct / avgRangePct : 0;
   const exceededSessions = values.filter((v) => v > stopPctPct).length;
   const band: ThermometerBand =
@@ -138,10 +141,12 @@ export function buildThermometer(
     minRangePct: values.length ? Math.min(...values) : 0,
     maxRangePct: values.length ? Math.max(...values) : 0,
     avgBarRangePct: barRangeCount ? (barRangeSum / barRangeCount) * 100 : 0,
-    remainMedianPct: quantile(remain, 0.5),
+    remainMedianPct,
     remainAvgPct: mean(remain),
-    remainRatio:
-      remain.length && quantile(remain, 0.5) > 0 ? stopPctPct / quantile(remain, 0.5) : 0,
+    // 분자·분모를 뒤집지 않는다: 배지는 '손절 ÷ 남은 구간', 문장은 '남은 구간 ÷ 손절'.
+    remainRatio: remainMedianPct > 0 ? stopPctPct / remainMedianPct : 0,
+    remainMultipleStop:
+      remainMedianPct > 0 && stopPctPct > 0 ? remainMedianPct / stopPctPct : 0,
     remainBars:
       entryBar !== undefined && dataset.sessions[0]
         ? Math.max(0, dataset.sessions[0].bars.length - 1 - entryBar)

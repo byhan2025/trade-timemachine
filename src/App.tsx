@@ -371,7 +371,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.1.1 · 최종 해석 리포트</span>
+        <span className="pill">v2.1.2 · 최종 해석 리포트</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -582,6 +582,7 @@ export default function App() {
                   inputMode="decimal"
                   step="any"
                   value={entry}
+                  data-testid="entry-input"
                   onChange={(e) => setEntry(e.target.value)}
                 />
               </label>
@@ -595,6 +596,7 @@ export default function App() {
                   inputMode="decimal"
                   step="any"
                   value={stop}
+                  data-testid="stop-input"
                   onChange={(e) => setStop(e.target.value)}
                 />
               </label>
@@ -608,6 +610,7 @@ export default function App() {
                   inputMode="decimal"
                   step="any"
                   value={target}
+                  data-testid="target-input"
                   onChange={(e) => setTarget(e.target.value)}
                 />
               </label>
@@ -750,7 +753,7 @@ export default function App() {
                       </strong>
                     </p>
                     <p className="muted small">
-                      통계를 쉬운 말로 풀고, 흔들림 온도계·9조합·20회 생존까지 한 페이지에 정리했습니다.
+                      통계를 쉬운 말로 풀고, 흔들림 온도계·손절·목표 조합·20회 생존까지 한 페이지에 정리했습니다.
                     </p>
                   </div>
                   <button type="button" className="btn easy-btn" onClick={openReport} data-testid="open-report">
@@ -817,7 +820,7 @@ export default function App() {
               <h2 className="card-title">아직 해석할 결과가 없습니다</h2>
               <p>
                 <strong>1. 시뮬레이터</strong>에서 종목과 진입가·손절가·목표가를 정하고 1만 번 모의 재생을
-                실행하면, 이 탭에 초보자용 최종 해석 리포트(요약·흔들림 온도계·9조합·20회 생존)가
+                실행하면, 이 탭에 초보자용 최종 해석 리포트(요약·흔들림 온도계·손절·목표 조합·20회 생존)가
                 만들어집니다.
               </p>
               <button type="button" className="btn primary" onClick={() => setTab("sim")}>
@@ -830,7 +833,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.1.1 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.1.2 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>

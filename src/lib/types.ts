@@ -16,6 +16,10 @@ export interface DatasetMeta {
   fetchedAt: string;
   interval: string;
   intervalSeconds?: number;
+  /** 연속 봉 간격이 모두 같으면 true, 섞여 있으면 false(불규칙 봉) */
+  intervalRegular?: boolean;
+  /** 실제 간격 분포 (예: "5분 3회, 55분 1회") */
+  gapSummary?: string;
   barTimestampMeans?: string;
   sessionStart: string;
   sessionEnd: string;

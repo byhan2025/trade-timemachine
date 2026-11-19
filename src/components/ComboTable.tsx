@@ -18,7 +18,8 @@ const MODES: { key: ComboMode; label: string; hint: string }[] = [
 ];
 
 /**
- * 🎯 9조합 비교표: 손절 3단계 × 목표 3단계(1R·1.5R·2R).
+ * 🎯 손절·목표 조합 비교표: 손절 3단계 × 목표 3단계(1R·1.5R·2R).
+ * 손절가가 호가 단위에서 겹쳐 중복 제거되면 실제 계산된 조합 수를 그대로 표기한다(9조합 고정 아님).
  * 성향 토글에 따라 '승률 최고' 또는 '평균 R 최고' 조합을 표시한다(추천가 아님).
  */
 export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
@@ -35,8 +36,10 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
   const pickedCell =
     (picked && result?.cells.find((c) => cellKey(c) === picked)) || null;
   const bestCell = bestKey ? (result?.cells.find((c) => cellKey(c) === bestKey) ?? null) : null;
-  /** 9칸 모두 평균 R이 0 미만이면 ★·'최고' 배지가 추천처럼 읽히지 않게 중립 표기한다 */
-  const allNegative = !!result && result.cells.length > 0 && result.cells.every((c) => c.avgR < 0);
+  /** 실제로 계산된 고유 조합 수 — 손절가 중복 제거 뒤에는 9보다 작을 수 있다 */
+  const validCount = result?.cells.length ?? 0;
+  /** 조합 수만큼 모두 평균 R이 0 미만이면 ★·'최고' 배지가 추천처럼 읽히지 않게 중립 표기한다 */
+  const allNegative = validCount > 0 && result!.cells.every((c) => c.avgR < 0);
   const bestBadge = allNegative
     ? "가장 높았던 칸(참고)"
     : mode === "winrate"
@@ -47,8 +50,7 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
     return (
       <div className="combo-wrap" data-testid="combo-table" aria-busy="true">
         <p className="combo-loading">
-          <span className="spinner" aria-hidden="true" /> 손절 3 × 목표 3 = 9가지 조합을 재생하는
-          중…
+          <span className="spinner" aria-hidden="true" /> 손절·목표 조합을 재생하는 중…
         </p>
       </div>
     );
@@ -75,18 +77,18 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
             </button>
           ))}
         </div>
-        <span className="muted small combo-meta">
-          9조합 × {result.replays.toLocaleString("ko-KR")}회 · {result.ms.toFixed(0)}ms
+        <span className="muted small combo-meta" data-testid="combo-count">
+          {validCount}개 조합 × {result.replays.toLocaleString("ko-KR")}회 · {result.ms.toFixed(0)}ms
         </span>
       </div>
 
       {allNegative && (
         <p className="alert warn small combo-all-negative" role="status" data-testid="combo-all-negative">
-          참고: 이 조건에서는 9개 조합 모두 평균 R이 0 미만(마이너스)입니다.
+          참고: 이 조건에서는 {validCount}개 조합 모두 평균 R이 0 미만(마이너스)입니다.
         </p>
       )}
 
-      <div className="combo-grid" role="table" aria-label="손절·목표 9조합 비교표">
+      <div className="combo-grid" role="table" aria-label={`손절·목표 ${validCount}개 조합 비교표`}>
         <div className="combo-grid-head" role="row">
           <span role="columnheader" className="combo-corner">
             손절폭

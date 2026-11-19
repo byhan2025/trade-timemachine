@@ -99,6 +99,8 @@ export function ReportView({ run, stale, onBack }: Props) {
   }, [run.sim, run.plan.riskPct, run.plan.account]);
 
   const lines = summaryLines(run, unit);
+  /** 계산된(또는 계산될) 고유 조합 수 — 손절가 호가 단위 중복 제거로 9보다 작을 수 있다 */
+  const comboCount = combos ? combos.cells.length : levels.length * 3;
 
   return (
     <div className="report" data-testid="report">
@@ -183,14 +185,22 @@ export function ReportView({ run, stale, onBack }: Props) {
       <section className="card" aria-labelledby="rep-combos">
         <div className="card-head">
           <h3 className="card-title" id="rep-combos">
-            3. 🎯 9가지 손절·목표 조합
+            3. 🎯 {comboCount}가지 손절·목표 조합
           </h3>
-          <span className="badge">손절 3 × 목표 3</span>
+          <span className="badge">
+            손절 {levels.length} × 목표 3
+          </span>
         </div>
         <p className="card-desc">
           내 진입가 {formatPrice(run.plan.entry, unit)} 기준으로 손절폭을 내 계획의 0.6배·1배·1.5배로
           바꾸고, 목표를 1R·1.5R·2R로 두었을 때의 과거 통계입니다.
         </p>
+        {levels.length < 3 && (
+          <p className="alert warn small" data-testid="combo-dedup-note">
+            손절폭이 너무 좁아 호가 단위에서 0.6배·1배·1.5배가 같은 가격이 되었습니다. 같은 손절가는 한
+            번만 계산해 손절 {levels.length}단계 × 목표 3 = {comboCount}개 조합으로 비교합니다.
+          </p>
+        )}
         <ComboTable
           result={combos}
           loading={combosBusy}
@@ -200,7 +210,7 @@ export function ReportView({ run, stale, onBack }: Props) {
         />
         {!combosBusy && !combos && (
           <p className="alert warn small">
-            완전한 세션이 3일 미만이라 9조합을 계산할 수 없습니다. 더 긴 데이터로 다시 실행해 주세요.
+            완전한 세션이 3일 미만이라 손절·목표 조합을 계산할 수 없습니다. 더 긴 데이터로 다시 실행해 주세요.
           </p>
         )}
       </section>
