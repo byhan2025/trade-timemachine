@@ -16,6 +16,8 @@ export interface SizeInput {
 export interface SizeResult {
   /** 가정한 포지션 방향 */
   side: Side;
+  /** 1주 가격(진입가) — 0주 원인을 '1주 가격 vs 계좌 금액'으로 가르기 위해 함께 돌려준다(v2.2.3) */
+  entry: number;
   riskPerShare: number;
   rewardPerShare: number;
   rr: number;
@@ -85,9 +87,26 @@ export function sizePosition(input: SizeInput): SizeResult {
     );
   }
   if (shares === 0 && riskPerShare > 0) {
-    warnings.push(
-      "1주 위험폭이 허용 손실 금액보다 큽니다. 계좌 금액이나 허용 손실률을 키우거나 손절폭을 좁혀야 합니다."
-    );
+    // v2.2.3 — 0주의 원인을 하나로 뭉뚱그리지 않고 실제로 걸린 항목만 말한다.
+    const tooWide = riskPerShare > lossBudget;
+    const tooPricey = entry > account;
+    const cause =
+      tooWide && tooPricey
+        ? "1주 위험폭이 1회 허용 손실 금액보다 크고, 1주 가격도 계좌 금액보다 큽니다"
+        : tooWide
+          ? "1주 위험폭이 1회 허용 손실 금액보다 큽니다"
+          : tooPricey
+            ? "1주 가격이 계좌 금액보다 큽니다"
+            : "1주 위험폭·계좌 금액 기준으로 1주를 담을 수 없습니다";
+    const advice =
+      tooWide && tooPricey
+        ? "계좌 금액이나 허용 손실률을 키우고, 손절폭도 좁혀야 합니다."
+        : tooWide
+          ? "계좌 금액이나 허용 손실률을 키우거나 손절폭을 좁혀야 합니다."
+          : tooPricey
+            ? "계좌 금액을 키우거나 1주 가격이 더 낮은 종목으로 확인해 보세요."
+            : "계좌 금액·허용 손실률·손절폭을 다시 확인해 보세요.";
+    warnings.push(`${cause} — ${advice}`);
   }
   if (byAccount < byLoss) {
     warnings.push(
@@ -98,6 +117,7 @@ export function sizePosition(input: SizeInput): SizeResult {
   }
   return {
     side,
+    entry,
     riskPerShare,
     rewardPerShare,
     rr: riskPerShare > 0 ? rewardPerShare / riskPerShare : 0,

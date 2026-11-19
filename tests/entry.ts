@@ -47,7 +47,10 @@ export {
   EXTREME_STOP_REASON,
   EXTREME_BANNER_NOTE,
   EXTREME_AVG_R_NOTE,
+  EXTREME_POSITIVE_NOTE,
   avgRTone,
+  positiveTone,
+  zeroShareReason,
   FLAT_R,
   trafficLevel,
   trafficBadge,
@@ -69,3 +72,4 @@ export {
   survivalFlatNote,
 } from "../src/lib/easy";
 export { ResultCards } from "../src/components/ResultCards";
+export { SizingCard, isExtremeStop } from "../src/components/SizingCard";

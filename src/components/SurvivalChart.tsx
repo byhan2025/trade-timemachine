@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SurvivalResult } from "../lib/survival";
 import { axisLabels, formatPctValue, isFlatSpan, moneyLabel } from "../lib/format";
 import { SURVIVAL_LABELS } from "../lib/terms";
-import { survivalFlatNote, survivalIndexText } from "../lib/easy";
+import { survivalFlatNote, survivalIndexText, positiveTone } from "../lib/easy";
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -33,6 +33,7 @@ export function SurvivalChart({
   planRiskPct,
   cashLimited,
   oneR,
+  extreme,
 }: {
   survival: SurvivalResult;
   unit: string;
@@ -45,7 +46,10 @@ export function SurvivalChart({
   cashLimited: boolean;
   /** 시작 자금 기준 1R 금액(원) */
   oneR: number;
+  /** 손절폭이 진입가의 0.01% 미만인 극단 입력 — 상위 10등을 초록으로 강조하지 않는다(v2.2.3) */
+  extreme?: boolean;
 }) {
+  const positive = positiveTone(extreme === true);
   const { ref, width } = useWidth<HTMLDivElement>();
   const compact = width < 520;
   const W = Math.max(280, width);
@@ -189,7 +193,7 @@ export function SurvivalChart({
         </div>
         <div>
           <span className="stat-label">{SURVIVAL_LABELS.high}</span>
-          <strong className="pos">
+          <strong className={positive}>
             {idx(survival.finalP90Idx)}
             <span className="muted small"> / 100</span>
           </strong>

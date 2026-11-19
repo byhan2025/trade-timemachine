@@ -49,10 +49,12 @@ export function SizingCard({
     effectiveRiskPct: size.effectiveRiskPct,
     riskLimitedByCash: size.riskLimitedByCash,
     unit,
+    entry: size.entry,
+    riskPerShare: size.riskPerShare,
     extreme: extremeStop,
   });
-  /** 극단 입력의 기댓값은 회색 중립색으로 — 수익 예상처럼 읽히지 않게 */
-  const neutralValue = extremeStop;
+  /** 극단 입력의 기댓값·목표 수익은 회색 중립색으로 — 수익 예상처럼 읽히지 않게 */
+  const neutralValue = extremeStop || !(size.shares > 0);
   /** 계산 수량 0주 — 매매가 실행되지 않는 무포지션 상태 */
   const noPosition = !(size.shares > 0);
 
@@ -64,7 +66,7 @@ export function SizingCard({
       <p className="easy-line" data-testid="easy-sizing">
         {easy}
       </p>
-      <dl className="kv sizing-kv">
+      <dl className="kv sizing-kv" data-testid="sizing-kv">
         <div>
           <dt>
             1주가 손절되면 잃는 돈
@@ -140,7 +142,15 @@ export function SizingCard({
             목표에 닿으면 버는 돈 (가정)
             <span className="kv-term">목표 도달 시 수익</span>
           </dt>
-          <dd className="pos">{moneyLabel(size.profitAtTarget, unit)}</dd>
+          {/* 극단 입력이면 목표 수익도 초록 강조 없이 중립 회색 (v2.2.3) */}
+          <dd className={neutralValue ? "neutral" : "pos"} data-testid="profit-at-target">
+            {moneyLabel(size.profitAtTarget, unit)}
+            {extremeStop && (
+              <span className="kv-sub" data-testid="profit-extreme-note">
+                극단적으로 좁은 손절폭이라 이 금액은 참고하기 어려워요
+              </span>
+            )}
+          </dd>
         </div>
         <div>
           <dt>

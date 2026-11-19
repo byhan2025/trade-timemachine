@@ -1,7 +1,7 @@
 import type { Dataset } from "../lib/types";
 import type { SimResult } from "../lib/simulate";
 import { formatPriceNumber, formatR } from "../lib/format";
-import { EXTREME_AVG_R_NOTE, avgRTone } from "../lib/easy";
+import { EXTREME_AVG_R_NOTE, EXTREME_POSITIVE_NOTE, avgRTone, positiveTone } from "../lib/easy";
 
 function pctText(x: number): string {
   if (x > 0 && x < 0.0005) return "<0.1%";
@@ -61,6 +61,8 @@ export function ResultCards({
   extreme?: boolean;
 }) {
   const avgRToneName = avgRTone(sim.avgR, extreme === true);
+  /** 극단 입력이면 긍정(초록) 강조를 끈다 — 목표 카드·이익 마감률 모두 중립(v2.2.3) */
+  const positive = positiveTone(extreme === true);
   const fmt = (x: number) => formatPriceNumber(x, unit);
   const tenths = splitHundred([sim.pTarget, sim.pStop, sim.pNeither]);
   const items = [
@@ -69,7 +71,8 @@ export function ResultCards({
       label: "목표가 먼저 도달",
       value: sim.pTarget,
       tenths: tenths[0],
-      color: "target",
+      // 녹색 목표 카드는 '좋은 결과' 강조라 극단 입력에서는 중립 카드로 바꿔 끈다
+      color: extreme === true ? "neutral" : "target",
       caption: `${Math.round(sim.pTarget * sim.replays).toLocaleString("ko-KR")}회`,
     },
     {
@@ -115,12 +118,19 @@ export function ResultCards({
           </div>
         ))}
       </div>
+      {extreme === true && (
+        <p className="muted small extreme-note" data-testid="cards-extreme-note">
+          {EXTREME_POSITIVE_NOTE}
+        </p>
+      )}
       <div className="insight-row">
         <div>
           <span className="insight-label">
             이익 마감률 <strong>(목표 도달 + 종가 유리 마감)</strong>
           </span>
-          <strong>{pctText(sim.pGreen)}</strong>
+          <strong className={positive} data-testid="green-close-rate">
+            {pctText(sim.pGreen)}
+          </strong>
           <span className="muted small">
             {" "}
             (목표 도달 {pctText(sim.pTarget)} + 목표 미도달이나 종가만 유리 {pctText(greenOnly)})

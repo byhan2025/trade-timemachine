@@ -661,6 +661,11 @@ a {
   color: var(--stop);
 }
 
+/* v2.2.3 — 극단 입력의 '목표가 먼저 도달' 카드는 녹색 대신 중립 카드로 (배경·테두리·값 모두 초록 없음) */
+.stat-neutral .stat-value {
+  color: #475569;
+}
+
 .stat-caption {
   display: block;
   font-size: 12px;

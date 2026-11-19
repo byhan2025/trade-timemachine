@@ -9,7 +9,7 @@ import {
   comboModeHint,
   type ComboMode,
 } from "../lib/terms";
-import { easyAvgMultiple, easyProfitCount, easyStopLevelLabel } from "../lib/easy";
+import { easyAvgMultiple, easyProfitCount, easyStopLevelLabel, positiveTone } from "../lib/easy";
 
 interface Props {
   result: ComboResult | null;
@@ -19,6 +19,8 @@ interface Props {
   onMode: (m: ComboMode) => void;
   /** 내 계획의 손절폭(비율) — 행 이름 '내 계획의 0.6배'를 만들 때 쓴다 */
   baseStopPct: number;
+  /** 손절폭이 진입가의 0.01% 미만인 극단 입력 — 이익 쪽 숫자를 초록으로 강조하지 않는다(v2.2.3) */
+  extreme?: boolean;
 }
 
 /**
@@ -27,8 +29,10 @@ interface Props {
  * 정확한 R·이익 마감률은 title(툴팁)·접이식 상세 줄에 그대로 남긴다.
  * 손절가가 호가 단위에서 겹쳐 중복 제거되면 실제 계산된 조합 수를 그대로 표기한다(9조합 고정 아님).
  */
-export function ComboTable({ result, loading, unit, mode, onMode, baseStopPct }: Props) {
+export function ComboTable({ result, loading, unit, mode, onMode, baseStopPct, extreme }: Props) {
   const [picked, setPicked] = useState<string | null>(null);
+  const extremeMode = extreme === true;
+  const positive = positiveTone(extremeMode);
 
   const bestKey = useMemo(() => {
     if (!result) return null;
@@ -141,10 +145,10 @@ export function ComboTable({ result, loading, unit, mode, onMode, baseStopPct }:
                       ★
                     </span>
                   )}
-                  <strong className={cell.pGreen >= 0.5 ? "cell-profit" : "cell-rare"}>
+                  <strong className={cell.pGreen >= 0.5 && !extremeMode ? "cell-profit" : "cell-rare"}>
                     {easyProfitCount(cell.pGreen)}
                   </strong>
-                  <span className={cell.avgR >= 0 ? "pos" : "neg"}>
+                  <span className={cell.avgR >= 0 ? positive : "neg"}>
                     {easyAvgMultiple(cell.avgR)}
                   </span>
                 </button>

@@ -48,6 +48,13 @@ export const EXTREME_BANNER_NOTE = "손절폭이 너무 좁아 참고하기 어�
  */
 export const EXTREME_AVG_R_NOTE = "극단적으로 좁은 손절폭이라 숫자가 크게 보일 수 있어요";
 
+/**
+ * v2.2.3 — '1만 번 모의 재생 결과' 카드의 초록 강조를 끈 이유.
+ * 목표 도달 확률·이익 마감률은 사실 값이지만 극단 입력에서는 좋아 보이는 강조를 하지 않는다.
+ */
+export const EXTREME_POSITIVE_NOTE =
+  "극단적으로 좁은 손절폭이라 목표·이익 쪽 숫자를 초록 강조 없이 중립으로 표시해요";
+
 /** 평균 R 강조 색의 이름 — 극단 입력은 초록/빨강 대신 중립 회색을 쓴다(v2.2.2) */
 export type AvgRTone = "pos" | "neg" | "neutral";
 
@@ -58,6 +65,15 @@ export type AvgRTone = "pos" | "neg" | "neutral";
 export function avgRTone(avgR: number, extreme = false): AvgRTone {
   if (extreme) return "neutral";
   return avgR >= 0 ? "pos" : "neg";
+}
+
+/**
+ * 긍정(초록) 강조의 색 이름 — 극단 입력이면 초록 대신 중립 회색(v2.2.3).
+ * 목표 도달 확률·목표 수익 금액·이익 카드처럼 '좋아 보이는' 숫자에 붙는 `.pos` 를 한 곳에서 끈다.
+ * 손절·손실(빨강 `.neg`)은 사실 그대로라 그대로 둔다.
+ */
+export function positiveTone(extreme = false): "pos" | "neutral" {
+  return extreme ? "neutral" : "pos";
 }
 
 /** 배지가 무엇을 기준으로 한 판정인지 배지 바로 밑에 적는다 */
@@ -405,8 +421,50 @@ export interface EasySizingInput {
   effectiveRiskPct: number;
   riskLimitedByCash: boolean;
   unit: string;
+  /** 1주 가격(진입가) — 0주 원인을 '1주 가격 vs 계좌 금액'으로 가른다 */
+  entry: number;
+  /** 1주당 위험폭(|진입가 − 손절가|) — 0주 원인을 '위험폭 vs 허용 손실'로 가른다 */
+  riskPerShare: number;
   /** 손절폭이 진입가의 0.01% 미만인 극단 입력 */
   extreme: boolean;
+}
+
+export interface ZeroShareReasonInput {
+  /** 1주당 위험폭(|진입가 − 손절가|) */
+  riskPerShare: number;
+  /** 계좌 × 1회 허용 손실률 = 1회 허용 손실 금액 */
+  lossBudget: number;
+  /** 1주 가격(진입가) */
+  entry: number;
+  account: number;
+  unit: string;
+}
+
+/**
+ * v2.2.3 — 수량이 0주가 된 원인을 실제로 걸린 항목만 골라 한 문장으로 말한다.
+ *   · 1주 위험폭 > 1회 허용 손실  → "1주 위험폭(…원)이 1회 허용 손실(…원)보다 커서 0주가 됐어요"
+ *   · 1주 가격 > 계좌 금액        → "1주 가격(…원)이 계좌 금액(…원)보다 커서 0주가 됐어요"
+ *   · 둘 다                        → 두 이유를 함께 적는다
+ * 두 원인을 한꺼번에 나열해 "손절폭이 너무 넓거나, 계좌 금액이 1주 값보다 작아요"처럼
+ * 짐작으로 말하지 않는다(4호 봇 v2.2.3 지적).
+ */
+export function zeroShareReason(input: ZeroShareReasonInput): string {
+  const { riskPerShare, lossBudget, entry, account, unit } = input;
+  if (!(riskPerShare > 0)) {
+    return "진입가와 손절가가 같아 1주 위험폭이 0이라 1주를 담을 수 없어 0주가 됐어요.";
+  }
+  const tooWide = riskPerShare > lossBudget;
+  const tooPricey = entry > account;
+  const riskText = `1주 위험폭(${moneyLabel(riskPerShare, unit)})`;
+  const budgetText = `1회 허용 손실(${moneyLabel(lossBudget, unit)})`;
+  const priceText = `1주 가격(${moneyLabel(entry, unit)})`;
+  const accountText = `계좌 금액(${moneyLabel(account, unit)})`;
+  if (tooWide && tooPricey) {
+    return `${riskText}이 ${budgetText}보다 크고, ${priceText}도 ${accountText}보다 커서 0주가 됐어요.`;
+  }
+  if (tooWide) return `${riskText}이 ${budgetText}보다 커서 0주가 됐어요.`;
+  if (tooPricey) return `${priceText}이 ${accountText}보다 커서 0주가 됐어요.`;
+  return `${riskText}·${priceText} 기준으로는 1주도 담을 수 없어 0주가 됐어요.`;
 }
 
 /** "계좌 …의 1.00%까지만 잃기로 하고 계산하면 100주예요. 이만큼 사면 손절될 때 약 98,200원을 잃어요." */
@@ -421,13 +479,21 @@ export function easySizingLine(input: EasySizingInput): string {
     effectiveRiskPct,
     riskLimitedByCash,
     unit,
+    entry,
+    riskPerShare,
     extreme,
   } = input;
   if (!(shares > 0)) {
-    return `이 조건에서는 1주도 계산되지 않았어요. 손절폭이 너무 넓거나, 계좌 금액이 1주 값보다 작아요. 계좌 ${moneyLabel(
+    return `이 조건에서는 1주도 계산되지 않았어요. ${zeroShareReason({
+      riskPerShare,
+      lossBudget,
+      entry,
       account,
+      unit,
+    })} 계좌 ${moneyLabel(account, unit)}의 ${formatPctValue(riskPct, 2)}(${moneyLabel(
+      lossBudget,
       unit
-    )}의 ${formatPctValue(riskPct, 2)}(${moneyLabel(lossBudget, unit)})로는 1주 위험폭을 감당하지 못해요.`;
+    )}) 기준이에요.`;
   }
   const verb = side === "buy" ? "사면" : "(빌려서) 팔면";
   let out = `계좌 ${moneyLabel(account, unit)}의 ${formatPctValue(riskPct, 2)}(${moneyLabel(

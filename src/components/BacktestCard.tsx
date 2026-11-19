@@ -1,15 +1,20 @@
 import type { BacktestResult } from "../lib/backtest";
 import { formatPct, formatPrice, formatR } from "../lib/format";
+import { avgRTone, positiveTone } from "../lib/easy";
 
 export function BacktestCard({
   bt,
   unit,
   intervalMinutes,
+  extreme,
 }: {
   bt: BacktestResult;
   unit: string;
   intervalMinutes: number;
+  /** 손절폭이 진입가의 0.01% 미만인 극단 입력 — 목표 도달·이익 R 을 초록으로 강조하지 않는다(v2.2.3) */
+  extreme?: boolean;
 }) {
+  const positive = positiveTone(extreme === true);
   const decided = bt.target + bt.stop;
   const hitAll = bt.triggered > 0 ? bt.target / bt.triggered : 0;
   const hitDecided = decided > 0 ? bt.target / decided : 0;
@@ -46,7 +51,7 @@ export function BacktestCard({
         </div>
         <div>
           <span className="stat-label">목표 도달</span>
-          <strong className="pos">{bt.target}</strong>
+          <strong className={positive}>{bt.target}</strong>
         </div>
         <div>
           <span className="stat-label">손절</span>
@@ -68,7 +73,7 @@ export function BacktestCard({
         </div>
         <div>
           <span className="stat-label">평균 R</span>
-          <strong className={bt.avgR === null ? "" : bt.avgR >= 0 ? "pos" : "neg"}>
+          <strong className={bt.avgR === null ? "" : avgRTone(bt.avgR, extreme === true)}>
             {bt.avgR === null ? "-" : formatR(bt.avgR)}
           </strong>
         </div>
@@ -105,10 +110,10 @@ export function BacktestCard({
                     <span className="muted small"> {t.entryTime}</span>
                   </td>
                   <td>{formatPrice(t.entry, unit)}</td>
-                  <td className={t.outcome === "target" ? "pos" : t.outcome === "stop" ? "neg" : ""}>
+                  <td className={t.outcome === "target" ? positive : t.outcome === "stop" ? "neg" : ""}>
                     {t.outcome === "target" ? "목표" : t.outcome === "stop" ? "손절" : "종료"}
                   </td>
-                  <td className={t.R >= 0 ? "pos" : "neg"}>{formatR(t.R)}</td>
+                  <td className={t.R >= 0 ? positive : "neg"}>{formatR(t.R)}</td>
                 </tr>
               ))}
             </tbody>

@@ -17,6 +17,7 @@ import {
   easyMoneyChip,
   easySummary,
   easyThermometerLine,
+  positiveTone,
 } from "../lib/easy";
 import { ThermometerView } from "./Thermometer";
 import { ComboTable } from "./ComboTable";
@@ -99,6 +100,8 @@ export function ReportView({ run, stale, onBack }: Props) {
   const comboCount = combos ? combos.cells.length : levels.length * 3;
   /** 손절폭이 진입가의 0.01% 미만이면 가격·퍼센트가 반올림으로 뭉개지지 않게 따로 알린다 */
   const extremeStop = stopPct > 0 && stopPct < EXTREME_STOP_RATIO;
+  /** 극단 입력이면 목표·이익 쪽 숫자의 초록 강조를 끈다 (v2.2.3) */
+  const positive = positiveTone(extremeStop);
 
   const easy = easySummary({
     sim: run.sim,
@@ -179,7 +182,8 @@ export function ReportView({ run, stale, onBack }: Props) {
         {extremeStop && (
           <p className="alert warn small verdict-caution" role="status" data-testid="extreme-caution">
             {EXTREME_STOP_REASON}. 그래서 위 신호등은 유리/손실 판정 대신 '⚪ 참고하기
-            어려워요'로 표시했어요 — 숫자가 실제보다 크게 보일 수 있어요.
+            어려워요'로 표시했고, 이 화면의 목표·이익 쪽 숫자도 초록 강조 없이 중립으로 표시했어요 —
+            숫자가 실제보다 크게 보일 수 있어요.
           </p>
         )}
         <details className="math-details" data-testid="math-details">
@@ -192,7 +196,9 @@ export function ReportView({ run, stale, onBack }: Props) {
           <div className="summary-stats">
             <div>
               <span className="stat-label">목표 도달</span>
-              <strong className="pos">{formatPct(run.sim.pTarget)}</strong>
+              <strong className={positive} data-testid="report-p-target">
+                {formatPct(run.sim.pTarget)}
+              </strong>
             </div>
             <div>
               <span className="stat-label">손절 도달</span>
@@ -261,6 +267,7 @@ export function ReportView({ run, stale, onBack }: Props) {
           mode={mode}
           onMode={setMode}
           baseStopPct={stopPct}
+          extreme={extremeStop}
         />
         {!combosBusy && !combos && (
           <p className="alert warn small">
@@ -298,6 +305,7 @@ export function ReportView({ run, stale, onBack }: Props) {
             planRiskPct={run.plan.riskPct}
             cashLimited={run.size.riskLimitedByCash}
             oneR={run.size.maxLoss}
+            extreme={extremeStop}
           />
         ) : (
           <p className="alert warn small">
@@ -314,6 +322,7 @@ export function ReportView({ run, stale, onBack }: Props) {
         riskPct={run.plan.riskPct}
         heading={`4. 한 번에 몇 주를 ${sharesWord} 할까요?`}
         headingId="rep-sizing"
+        extreme={extremeStop}
       />
 
       {/* ---------------------------------------------------------------- 5. 용어 */}

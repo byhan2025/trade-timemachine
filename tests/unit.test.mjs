@@ -37,8 +37,13 @@ import {
   EXTREME_STOP_REASON,
   EXTREME_BANNER_NOTE,
   EXTREME_AVG_R_NOTE,
+  EXTREME_POSITIVE_NOTE,
   avgRTone,
+  positiveTone,
+  zeroShareReason,
   ResultCards,
+  SizingCard,
+  isExtremeStop,
   FLAT_R,
   trafficLevel,
   trafficBadge,
@@ -1093,6 +1098,8 @@ test("v2.2 수량 카드 한 줄: 사야/팔아야·극단 입력·0주를 구�
     effectiveRiskPct: 0.982,
     riskLimitedByCash: false,
     unit: "원",
+    entry: 98_200,
+    riskPerShare: 2_000,
     extreme: false,
   };
   const buy = easySizingLine(base);
@@ -1106,8 +1113,11 @@ test("v2.2 수량 카드 한 줄: 사야/팔아야·극단 입력·0주를 구�
   assert.match(limited, /0\.00001%/);
   const extreme = easySizingLine({ ...base, extreme: true });
   assert.match(extreme, /극단적으로 좁은 손절폭이라 이 숫자는 참고하기 어려워요/);
-  const zero = easySizingLine({ ...base, shares: 0, maxLoss: 0 });
+  // v2.2.3 — 0주는 원인을 하나로 뭉치지 않고 걸린 항목만 말한다
+  const zero = easySizingLine({ ...base, shares: 0, maxLoss: 0, riskPerShare: 200_000 });
   assert.match(zero, /1주도 계산되지 않았어요/);
+  assert.match(zero, /1주 위험폭\(200,000원\)이 1회 허용 손실\(100,000원\)보다 커서 0주가 됐어요/);
+  assert.ok(!zero.includes("손절폭이 너무 넓거나"), "두 원인을 함께 말하는 옛 문구는 사라졌다");
 });
 
 test("v2.2 생존 그래프: 100·100·100 겹침을 피하고 등수 이름을 쓴다", () => {
@@ -1440,8 +1450,10 @@ test("v2.2.2 5초 요약 배너: 극단 입력은 평균 R 중립 + 참고 1줄,
   assert.match(banner, /EXTREME_BANNER_NOTE/);
   // 배너 안에서 평균 R을 초록/빨강으로 직접 고르던 옛 분기는 사라졌다
   assert.doesNotMatch(banner, /run\.sim\.avgR >= 0 \? "pos" : "neg"/);
-  // 목표·손절 확률은 종전대로 pos/neg (극단 입력에서도 사실 그대로)
-  assert.match(banner, /className="pos">\{formatPct\(run\.sim\.pTarget\)\}/);
+  // 목표·손절 확률: 목표 쪽은 극단 입력에서 초록을 끄고 중립, 손절(빨강)은 사실 그대로
+  assert.match(banner, /className=\{positiveTone\(isExtremeStop\(run\.plan\.entry, run\.plan\.stop\)\)\}/);
+  assert.match(banner, /data-testid="banner-p-target"/);
+  assert.doesNotMatch(banner, /className="pos">\{formatPct\(run\.sim\.pTarget\)\}/);
   assert.match(banner, /className="neg">\{formatPct\(run\.sim\.pStop\)\}/);
   // 결과 카드에도 같은 극단 플래그를 넘긴다
   assert.match(app, /<ResultCards[\s\S]{0,260}extreme=\{isExtremeStop\(run\.plan\.entry, run\.plan\.stop\)\}/);
@@ -1465,4 +1477,218 @@ test("v2.2.2 CSS: .neutral 은 중립 회색이고 초록/빨강을 쓰지 않�
   // pos/neg 는 종전 그대로 (일반 입력의 유리/손실 강조 유지)
   assert.match(ruleOf(".pos"), /var\(--target\)/);
   assert.match(ruleOf(".neg"), /var\(--stop\)/);
+});
+
+/* ================================================================== v2.2.3 */
+
+test("v2.2.3 positiveTone: 극단 입력이면 긍정(초록) 강조를 끄고, 아니면 종전 초록", () => {
+  assert.equal(positiveTone(true), "neutral");
+  assert.equal(positiveTone(false), "pos");
+  assert.equal(positiveTone(), "pos");
+  // 평균 R 색 결정은 v2.2.2 그대로 (회귀 방지)
+  assert.equal(avgRTone(729.07, true), "neutral");
+  assert.equal(avgRTone(0.4, false), "pos");
+});
+
+test("v2.2.3 0주 원인 분기: 위험폭 초과·1주 가격 초과·둘 다를 정확히 가른다", () => {
+  const base = {
+    unit: "원",
+    account: 10_000_000,
+    lossBudget: 100_000,
+    entry: 50_000,
+    riskPerShare: 2_000,
+  };
+  // ① 위험폭만: 1주 위험폭 > 1회 허용 손실
+  assert.equal(
+    zeroShareReason({ ...base, riskPerShare: 200_000 }),
+    "1주 위험폭(200,000원)이 1회 허용 손실(100,000원)보다 커서 0주가 됐어요."
+  );
+  // ② 1주 가격만: entry > account (계좌 금액)
+  assert.equal(
+    zeroShareReason({ ...base, account: 30_000, entry: 40_000, lossBudget: 300, riskPerShare: 200 }),
+    "1주 가격(40,000원)이 계좌 금액(30,000원)보다 커서 0주가 됐어요."
+  );
+  // ③ 둘 다: 두 이유를 함께 적는다
+  assert.equal(
+    zeroShareReason({ ...base, account: 30_000, entry: 40_000, riskPerShare: 2_000, lossBudget: 300 }),
+    "1주 위험폭(2,000원)이 1회 허용 손실(300원)보다 크고, 1주 가격(40,000원)도 계좌 금액(30,000원)보다 커서 0주가 됐어요."
+  );
+  // ④ 위험폭 0(진입가=손절가)은 별도 원인으로 말한다
+  assert.match(zeroShareReason({ ...base, riskPerShare: 0 }), /진입가와 손절가가 같아 1주 위험폭이 0이라/);
+  // 두 원인을 한꺼번에 나열하는 옛 문구는 남아 있지 않다
+  for (const s of [
+    zeroShareReason({ ...base, riskPerShare: 200_000 }),
+    zeroShareReason({ ...base, account: 30_000, entry: 40_000, lossBudget: 300, riskPerShare: 200 }),
+  ]) {
+    assert.ok(!s.includes("손절폭이 너무 넓거나"), s);
+    assert.ok(!s.includes("계좌 금액이 1주 값보다 작아요"), s);
+  }
+});
+
+test("v2.2.3 sizePosition: 0주 경고와 수량 카드 한 줄이 같은 원인을 말한다", () => {
+  const mk = (entry, stop, account) =>
+    sizePosition({
+      entry,
+      stop,
+      target: entry * 2,
+      account,
+      riskPct: 1,
+      side: "buy",
+      expectedR: 0,
+    });
+
+  // ① 위험폭 초과만 (1주 가격 = 계좌 금액, 현금으로는 1주 가능)
+  const riskOnly = mk(100_000, 50_000, 100_000);
+  assert.equal(riskOnly.shares, 0);
+  assert.equal(riskOnly.entry, 100_000);
+  assert.ok(riskOnly.warnings.some((w) => w.includes("1주 위험폭이 1회 허용 손실 금액보다 큽니다")));
+  assert.ok(!riskOnly.warnings.some((w) => w.includes("1주 가격이 계좌 금액보다 큽니다")));
+  assert.match(easySizingLine({ ...riskOnly, account: 100_000, riskPct: 1, unit: "원", extreme: false }),
+    /1주 위험폭\(50,000원\)이 1회 허용 손실\(1,000원\)보다 커서 0주가 됐어요/);
+
+  // ② 1주 가격 초과만 (위험폭은 허용 손실 안)
+  const priceOnly = mk(200_000, 199_000, 100_000);
+  assert.equal(priceOnly.shares, 0);
+  assert.ok(priceOnly.warnings.some((w) => w.includes("1주 가격이 계좌 금액보다 큽니다")));
+  assert.ok(!priceOnly.warnings.some((w) => w.includes("1주 위험폭이 1회 허용 손실 금액보다 큽니다")));
+  assert.match(easySizingLine({ ...priceOnly, account: 100_000, riskPct: 1, unit: "원", extreme: false }),
+    /1주 가격\(200,000원\)이 계좌 금액\(100,000원\)보다 커서 0주가 됐어요/);
+
+  // ③ 둘 다
+  const both = mk(200_000, 150_000, 100_000);
+  assert.equal(both.shares, 0);
+  assert.ok(
+    both.warnings.some((w) =>
+      w.includes("1주 위험폭이 1회 허용 손실 금액보다 크고, 1주 가격도 계좌 금액보다 큽니다")
+    ),
+    both.warnings.join(" / ")
+  );
+  assert.match(easySizingLine({ ...both, account: 100_000, riskPct: 1, unit: "원", extreme: false }),
+    /1주 위험폭\(50,000원\)이 1회 허용 손실\(1,000원\)보다 크고, 1주 가격\(200,000원\)도 계좌 금액\(100,000원\)보다 커서 0주가 됐어요/);
+
+  // 0주가 아닌 경우에는 0주 경고가 붙지 않는다
+  const normal = mk(10_000, 9_000, 10_000_000);
+  assert.ok(normal.shares > 0);
+  assert.ok(!normal.warnings.some((w) => w.includes("0주")));
+});
+
+test("v2.2.3 수량 카드: 0주 원인이 카드 문장과 경고 목록에 실제 값으로 보인다", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const size = sizePosition({
+    entry: 200_000,
+    stop: 199_000,
+    target: 300_000,
+    account: 100_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: 0,
+  });
+  const html = renderToStaticMarkup(
+    SizingCard({ size, unit: "원", account: 100_000, riskPct: 1, extreme: isExtremeStop(200_000, 199_000) })
+  );
+  assert.match(html, /1주 가격\(200,000원\)이 계좌 금액\(100,000원\)보다 커서 0주가 됐어요/);
+  assert.ok(!html.includes("손절폭이 너무 넓거나"), "옛 뭉뚱그린 문구 없음");
+  assert.match(html, /0주/);
+  // 0주(무포지션)면 목표 수익 0원을 초록으로 강조하지 않는다
+  assert.ok(!html.includes('class="pos"'), "0주 카드에 초록 강조가 없다");
+  assert.match(html, /data-testid="profit-at-target"[^>]*class="neutral"|class="neutral"[^>]*data-testid="profit-at-target"/);
+});
+
+test("v2.2.3 수량 카드: 극단 입력은 '목표에 닿으면 버는 돈'도 초록이 아니라 중립", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const size = sizePosition({
+    entry: 100_000,
+    stop: 99_999.99,
+    target: 100_100,
+    account: 10_000_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: 729.07,
+  });
+  const extremeHtml = renderToStaticMarkup(
+    SizingCard({ size, unit: "원", account: 10_000_000, riskPct: 1, extreme: true })
+  );
+  assert.match(extremeHtml, /data-testid="profit-at-target"[^>]*class="neutral"|class="neutral"[^>]*data-testid="profit-at-target"/);
+  assert.ok(!extremeHtml.includes('class="pos"'), "극단 입력 수량 카드에 초록 강조가 없다");
+  assert.match(extremeHtml, /data-testid="profit-extreme-note"/);
+
+  const normalHtml = renderToStaticMarkup(
+    SizingCard({ size, unit: "원", account: 10_000_000, riskPct: 1, extreme: false })
+  );
+  assert.match(normalHtml, /data-testid="profit-at-target"[^>]*class="pos"|class="pos"[^>]*data-testid="profit-at-target"/);
+  assert.ok(!normalHtml.includes('data-testid="profit-extreme-note"'));
+});
+
+test("v2.2.3 1만 번 결과 카드: 극단 입력은 목표 카드·이익 마감률까지 초록 0건", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const sim = {
+    replays: 10000,
+    pTarget: 0.074,
+    pStop: 0.926,
+    pNeither: 0,
+    pGreen: 0.08,
+    avgR: 729.07,
+    rAtTarget: 1,
+    barsLeft: 59,
+    ms: 41,
+    seed: 19,
+  };
+  const extremeHtml = renderToStaticMarkup(ResultCards({ sim, unit: "원", extreme: true }));
+  assert.ok(!extremeHtml.includes('class="pos"'), "초록(.pos) 강조 0건");
+  assert.ok(!extremeHtml.includes("stat-target"), "녹색 목표 카드 색 0건");
+  assert.match(extremeHtml, /class="stat-card stat-neutral"/);
+  assert.match(extremeHtml, /data-testid="green-close-rate"[^>]*class="neutral"|class="neutral"[^>]*data-testid="green-close-rate"/);
+  assert.match(extremeHtml, /data-testid="cards-extreme-note"/);
+  assert.ok(extremeHtml.includes(EXTREME_POSITIVE_NOTE));
+  // 손절 확률은 사실 값이라 빨강 유지
+  assert.ok(extremeHtml.includes("stat-stop"));
+
+  const normalHtml = renderToStaticMarkup(ResultCards({ sim, unit: "원" }));
+  assert.match(normalHtml, /class="stat-card stat-target"/);
+  assert.match(normalHtml, /class="pos"[^>]*data-testid="green-close-rate"|data-testid="green-close-rate"[^>]*class="pos"/);
+  assert.ok(!normalHtml.includes('data-testid="cards-extreme-note"'));
+});
+
+test("v2.2.3 모든 결과 컴포넌트가 extreme 플래그를 받아 초록 강조를 끈다", () => {
+  const read = (p) => readFileSync(p, "utf8");
+  // 5초 요약 배너: 목표 도달 확률도 positiveTone 으로 색을 정한다
+  const app = read("src/App.tsx");
+  assert.match(app, /positiveTone\(isExtremeStop\(run\.plan\.entry, run\.plan\.stop\)\)/);
+  assert.match(app, /<ResultCards[\s\S]{0,300}extreme=\{isExtremeStop/);
+  assert.match(app, /<SizingCard[\s\S]{0,400}extreme=\{isExtremeStop/);
+  assert.match(app, /<BacktestCard[\s\S]{0,300}extreme=\{isExtremeStop/);
+
+  // 리포트: 목표 도달 통계·수량 카드·생존 그래프·조합표 모두 같은 플래그
+  const rep = read("src/components/ReportView.tsx");
+  assert.match(rep, /const positive = positiveTone\(extremeStop\)/);
+  assert.match(rep, /data-testid="report-p-target"/);
+  assert.match(rep, /<SizingCard[\s\S]{0,400}extreme=\{extremeStop\}/);
+  assert.match(rep, /<SurvivalChart[\s\S]{0,500}extreme=\{extremeStop\}/);
+  assert.match(rep, /<ComboTable[\s\S]{0,400}extreme=\{extremeStop\}/);
+
+  // 각 컴포넌트는 극단 입력에서 .pos 를 렌더하지 않는다
+  for (const f of [
+    "src/components/BacktestCard.tsx",
+    "src/components/SurvivalChart.tsx",
+    "src/components/ComboTable.tsx",
+  ]) {
+    const src = read(f);
+    assert.match(
+      src,
+      /positiveTone\(extreme === true\)|positiveTone\(extremeMode\)/,
+      `${f} 가 극단 플래그를 색에 반영하지 않습니다`
+    );
+    assert.ok(!/"pos"/.test(src), `${f} 에 초록 강조를 직접 고르는 "pos" 리터럴이 남아 있습니다`);
+  }
+  const sizing = read("src/components/SizingCard.tsx");
+  assert.ok(!/dd className="pos"/.test(sizing), "수량 카드의 목표 수익이 여전히 항상 초록입니다");
+});
+
+test("v2.2.3 CSS: 중립 카드의 값도 초록을 쓰지 않는다", () => {
+  const rule = ruleOf(".stat-neutral .stat-value");
+  assert.ok(rule, "`.stat-neutral .stat-value` 규칙이 없습니다");
+  assert.match(rule, /color:\s*#475569/);
+  assert.doesNotMatch(rule, /#16a34a|#15803d|var\(--target\)/);
+  // 녹색 목표 카드는 일반 입력용으로 그대로 남는다
+  assert.match(ruleOf(".stat-target"), /var\(--target-bg\)/);
 });

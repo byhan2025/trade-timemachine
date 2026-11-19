@@ -11,7 +11,7 @@ import type { RunResult } from "./lib/run";
 import { FanChart } from "./components/FanChart";
 import { ResultCards } from "./components/ResultCards";
 import { SizingCard, isExtremeStop } from "./components/SizingCard";
-import { EXTREME_BANNER_NOTE, avgRTone } from "./lib/easy";
+import { EXTREME_BANNER_NOTE, avgRTone, positiveTone } from "./lib/easy";
 import { BacktestCard } from "./components/BacktestCard";
 import { DataNote } from "./components/DataNote";
 import { StockSearch } from "./components/StockSearch";
@@ -376,7 +376,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.2.2 · 극단 입력 중립 표시</span>
+        <span className="pill">v2.2.3 · 극단 입력 전체 중립·0주 원인 분기</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -751,8 +751,16 @@ export default function App() {
                   <div className="easy-banner-body">
                     <span className="badge strong">5초 요약</span>
                     <p>
-                      1만 번 중 <strong className="pos">{formatPct(run.sim.pTarget)}</strong> 목표 도달 ·{" "}
-                      <strong className="neg">{formatPct(run.sim.pStop)}</strong> 손절 · 1회 평균{" "}
+                      {/* 극단 입력은 목표 도달 확률도 초록 강조 없이 중립 (v2.2.3) */}
+                      1만 번 중{" "}
+                      <strong
+                        className={positiveTone(isExtremeStop(run.plan.entry, run.plan.stop))}
+                        data-testid="banner-p-target"
+                      >
+                        {formatPct(run.sim.pTarget)}
+                      </strong>{" "}
+                      목표 도달 · <strong className="neg">{formatPct(run.sim.pStop)}</strong> 손절 · 1회
+                      평균{" "}
                       {/* 극단 입력은 평균 R을 초록으로 강조하지 않고 중립 회색으로 (v2.2.2) */}
                       <strong
                         className={avgRTone(run.sim.avgR, isExtremeStop(run.plan.entry, run.plan.stop))}
@@ -820,6 +828,7 @@ export default function App() {
                   bt={run.bt}
                   unit={run.dataset.priceUnit}
                   intervalMinutes={run.dataset.meta.intervalSeconds ? run.dataset.meta.intervalSeconds / 60 : 5}
+                  extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
                 />
               </>
             )}
@@ -854,7 +863,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.2.2 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.2.3 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>
