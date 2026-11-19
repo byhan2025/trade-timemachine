@@ -41,8 +41,11 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
   const stopLine = thermo.stopPct * 100;
   const stopY = y(stopLine);
 
-  const gaugeMax = Math.max(thermo.avgRangePct, stopLine) * 1.18 || 1;
+  const hasRemain = thermo.remainMedianPct > 0;
+  const gaugeMax =
+    Math.max(thermo.avgRangePct, hasRemain ? thermo.remainMedianPct : 0, stopLine) * 1.18 || 1;
   const avgW = Math.min(100, (thermo.avgRangePct / gaugeMax) * 100);
+  const remainW = Math.min(100, (thermo.remainMedianPct / gaugeMax) * 100);
   const stopW = Math.min(100, (stopLine / gaugeMax) * 100);
 
   return (
@@ -55,6 +58,17 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           </div>
           <strong className="thermo-row-value">±{thermo.avgRangePct.toFixed(2)}%</strong>
         </div>
+        {hasRemain && (
+          <div className="thermo-row">
+            <span className="thermo-row-label">
+              진입 후 남은 {thermo.remainBars}봉
+            </span>
+            <div className="thermo-track">
+              <span className="thermo-fill remain" style={{ width: `${remainW}%` }} />
+            </div>
+            <strong className="thermo-row-value">±{thermo.remainMedianPct.toFixed(2)}%</strong>
+          </div>
+        )}
         <div className="thermo-row">
           <span className="thermo-row-label">내 손절폭</span>
           <div className="thermo-track">
@@ -64,6 +78,11 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
         </div>
         <p className="thermo-ratio">
           <span className={`thermo-badge ${thermo.band}`}>손절 ÷ 하루 변동폭 = {thermo.ratio.toFixed(2)}배</span>
+          {hasRemain && (
+            <span className="thermo-badge light">
+              남은 구간 대비 {thermo.remainRatio.toFixed(2)}배
+            </span>
+          )}
           <span className="muted small">
             최근 {thermo.sessions}세션 중 {thermo.exceededSessions}일(
             {(thermo.exceededPct * 100).toFixed(0)}%)이 내 손절폭보다 크게 움직였습니다.
@@ -162,6 +181,12 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           {thermo.maxRangePct.toFixed(2)}%
         </li>
         <li>분봉 한 개 평균 진폭(ATR) {thermo.avgAtrPct.toFixed(2)}%</li>
+        {hasRemain && (
+          <li>
+            진입 후 남은 {thermo.remainBars}봉 변동폭 중앙 ±{thermo.remainMedianPct.toFixed(2)}% (내
+            손절의 {thermo.remainRatio.toFixed(2)}배)
+          </li>
+        )}
       </ul>
     </div>
   );

@@ -34,6 +34,7 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
 
   const pickedCell =
     (picked && result?.cells.find((c) => cellKey(c) === picked)) || null;
+  const bestCell = bestKey ? (result?.cells.find((c) => cellKey(c) === bestKey) ?? null) : null;
 
   if (loading) {
     return (
@@ -111,7 +112,7 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
                     unit
                   )} · 승률 ${formatPct(cell.pGreen)} · 평균 R ${cell.avgR.toFixed(2)}`}
                 >
-                  {best && <span className="combo-best-tag">{mode === "winrate" ? "승률 최고" : "평균 R 최고"}</span>}
+                  {best && <span className="combo-best-star" aria-hidden="true">★</span>}
                   <strong>{formatPct(cell.pGreen)}</strong>
                   <span className={cell.avgR >= 0 ? "pos" : "neg"}>
                     {cell.avgR >= 0 ? "+" : "−"}
@@ -123,6 +124,15 @@ export function ComboTable({ result, loading, unit, mode, onMode }: Props) {
           </div>
         ))}
       </div>
+
+      {bestCell && (
+        <p className="combo-best-line">
+          <span className="badge">{mode === "winrate" ? "승률 최고" : "평균 R 최고"}</span> 손절{" "}
+          {(bestCell.stopPct * 100).toFixed(2)}% ({formatPrice(bestCell.stop, unit)}) · 목표{" "}
+          {bestCell.targetR}R · 이익 마감 {formatPct(bestCell.pGreen)} · 평균{" "}
+          {bestCell.avgR.toFixed(2)}R
+        </p>
+      )}
 
       <p className="combo-detail" role="status">
         {pickedCell ? (

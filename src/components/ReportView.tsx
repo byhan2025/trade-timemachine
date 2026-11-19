@@ -42,8 +42,8 @@ export function ReportView({ run, stale, onBack }: Props) {
   const stopPct = Math.abs(run.plan.entry - run.plan.stop) / run.plan.entry;
 
   const thermo = useMemo(
-    () => buildThermometer(run.dataset, stopPct),
-    [run.dataset, stopPct]
+    () => buildThermometer(run.dataset, stopPct, run.plan.entryBar),
+    [run.dataset, stopPct, run.plan.entryBar]
   );
 
   const levels = useMemo(

@@ -19,6 +19,13 @@ export interface Thermometer {
   maxRangePct: number;
   /** 분봉 한 개의 평균 진폭(고−저 ÷ 종가) % = 이 데이터의 ATR 비율 */
   avgAtrPct: number;
+  /** 진입 봉 이후 남은 구간(세션 고저폭 ÷ 진입가)의 중앙값·평균 (%) */
+  remainMedianPct: number;
+  remainAvgPct: number;
+  /** 손절폭 ÷ 남은 구간 중앙 변동폭 */
+  remainRatio: number;
+  /** 남은 봉 수 */
+  remainBars: number;
   /** 내 손절폭(%) */
   stopPct: number;
   /** 손절폭 ÷ 평균 장중 변동폭 */
@@ -50,8 +57,13 @@ function quantile(values: number[], q: number): number {
  * - 장중 변동폭 = 세션 고가와 저가의 폭 ÷ 세션 첫 봉 시가
  * - 분봉 진폭(ATR 비율) = 봉마다 (고가-저가) ÷ 종가 의 평균
  */
-export function buildThermometer(dataset: Dataset, stopPct: number): Thermometer {
+export function buildThermometer(
+  dataset: Dataset,
+  stopPct: number,
+  entryBar?: number
+): Thermometer {
   const ranges: SessionRange[] = [];
+  const remain: number[] = [];
   let atrSum = 0;
   let atrCount = 0;
   for (const session of dataset.sessions) {
@@ -71,6 +83,18 @@ export function buildThermometer(dataset: Dataset, stopPct: number): Thermometer
     const open = bars[0][0];
     if (!(open > 0) || !isFinite(high) || !isFinite(low)) continue;
     ranges.push({ date: session.date, rangePct: ((high - low) / open) * 100 });
+
+    // 진입 봉 종가 이후 남은 구간만의 고저폭 — 손절이 실제로 겪는 흔들림
+    if (entryBar !== undefined && entryBar >= 0 && bars.length > entryBar + 1) {
+      const ref = bars[entryBar][3];
+      let rh = -Infinity;
+      let rl = Infinity;
+      for (let i = entryBar + 1; i < bars.length; i++) {
+        if (bars[i][1] > rh) rh = bars[i][1];
+        if (bars[i][2] < rl) rl = bars[i][2];
+      }
+      if (ref > 0 && isFinite(rh) && isFinite(rl)) remain.push(((rh - rl) / ref) * 100);
+    }
   }
 
   const values = ranges.map((r) => r.rangePct);
@@ -96,6 +120,14 @@ export function buildThermometer(dataset: Dataset, stopPct: number): Thermometer
     minRangePct: values.length ? Math.min(...values) : 0,
     maxRangePct: values.length ? Math.max(...values) : 0,
     avgAtrPct: atrCount ? (atrSum / atrCount) * 100 : 0,
+    remainMedianPct: quantile(remain, 0.5),
+    remainAvgPct: mean(remain),
+    remainRatio:
+      remain.length && quantile(remain, 0.5) > 0 ? stopPctPct / quantile(remain, 0.5) : 0,
+    remainBars:
+      entryBar !== undefined && dataset.sessions[0]
+        ? Math.max(0, dataset.sessions[0].bars.length - 1 - entryBar)
+        : 0,
     stopPct,
     ratio,
     exceededSessions,
