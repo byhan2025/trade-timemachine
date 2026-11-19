@@ -72,6 +72,7 @@ export function ReportView({ run, stale, onBack }: Props) {
               entryBar: run.plan.entryBar,
               levels,
               replays: 2500,
+              unit,
             })
           );
         }

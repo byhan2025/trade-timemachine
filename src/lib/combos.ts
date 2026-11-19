@@ -71,9 +71,12 @@ export function compareCombos(input: {
   targetRs?: number[];
   replays?: number;
   seed?: number;
+  /** 호가 단위 반올림용 통화 단위 ("원"이면 1원 단위) */
+  unit?: string;
 }): ComboResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const { pool, entry, side, entryBar, levels } = input;
+  const unit = input.unit ?? "";
   const targetRs = input.targetRs ?? [1, 1.5, 2];
   const replays = input.replays ?? 2500;
   const seed = input.seed ?? 19;
@@ -82,7 +85,13 @@ export function compareCombos(input: {
   for (const level of levels) {
     const risk = Math.abs(entry - level.stop);
     for (const targetR of targetRs) {
-      const target = side === "buy" ? entry + targetR * risk : entry - targetR * risk;
+      // 화면·표에 보이는 목표가와 계산에 쓰는 목표가를 같게 만든다(호가 단위 반올림).
+      const raw = side === "buy" ? entry + targetR * risk : entry - targetR * risk;
+      let target = roundPrice(raw, unit);
+      if (target === entry) {
+        const step = unit === "원" ? 1 : 0.01;
+        target = roundPrice(side === "buy" ? entry + step : entry - step, unit);
+      }
       const sim = simulate({
         pool,
         entry,

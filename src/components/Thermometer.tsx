@@ -189,10 +189,14 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           </li>
         )}
       </ul>
-      <p className="footnote thermo-caveat">
+      <p className="footnote thermo-caveat" data-testid="thermo-caveat">
         일중 고저폭은 그날 고가와 저가 사이의 전체 범위입니다. 시가 대비 위아래로 얼마나 벌어졌는지
         (방향)와 진입 후 어떤 경로로 움직였는지는 구분하지 않으므로, 손절 체결 가능성의 참고 지표로만
         보세요.
+        <br />
+        <strong>일중 고저폭 = (세션 고가 − 세션 저가) ÷ 시가 × 100%</strong>
+        <br />
+        권유가 아닌 과거 세션 변동폭 비교 참고치입니다.
       </p>
     </div>
   );

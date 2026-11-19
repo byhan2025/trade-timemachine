@@ -128,6 +128,20 @@ test("시간이 역순인 봉은 차단한다", () => {
   assert.throws(() => parseCustom(csv(rows)), /시각이 역순인 봉/);
 });
 
+test("역순 봉 안내에 HTS 역순 CSV를 시간순으로 바꾸라는 문구가 들어간다", () => {
+  const rows = baseRows(3);
+  const tmp = rows[1];
+  rows[1] = rows[2];
+  rows[2] = tmp;
+  assert.throws(
+    () => parseCustom(csv(rows)),
+    (e) =>
+      /시간순\(오래된 봉 → 최신 봉\)/.test(e.message) &&
+      /HTS/.test(e.message) &&
+      /최신 봉부터 내려오는 CSV/.test(e.message)
+  );
+});
+
 test("가격이 숫자가 아닌(누락) 봉은 차단한다", () => {
   const rows = baseRows(3);
   rows[2] = [rows[2][0], "", 101, 99, 100, 1000];
@@ -365,6 +379,39 @@ test("20회 생존: 연패·자금 궤적이 분포와 맞는다", () => {
   assert.equal(allWin.maxStreakMedian, 0);
   assert.ok(allWin.finalMedianIdx > 100);
   assert.ok(allWin.finalMedian > 10_000_000);
+});
+
+test("9조합 목표가도 호가 단위로 반올림해 계산과 표시가 같다", () => {
+  const d = datasetFor();
+  const pool = buildPool(d.sessions, d.times.length);
+  const levels = buildStopLevels(100, 0.01, "원", "buy");
+  const res = compareCombos({
+    pool,
+    entry: 100,
+    side: "buy",
+    entryBar: 5,
+    levels,
+    targetRs: [1, 1.5, 2],
+    replays: 300,
+    unit: "원",
+  });
+  for (const c of res.cells) {
+    assert.ok(Number.isInteger(c.target), `목표가 ${c.target}가 1원 단위가 아닙니다`);
+    assert.ok(c.target > 100, "매수 목표가는 진입가보다 커야 합니다");
+    const risk = Math.abs(100 - c.stop);
+    assert.ok(Math.abs(c.target - (100 + c.targetR * risk)) <= 0.5, "목표가가 R 기준과 0.5원 넘게 어긋납니다");
+  }
+  const sell = compareCombos({
+    pool,
+    entry: 100,
+    side: "sell",
+    entryBar: 5,
+    levels: buildStopLevels(100, 0.01, "원", "sell"),
+    targetRs: [2],
+    replays: 300,
+    unit: "원",
+  });
+  for (const c of sell.cells) assert.ok(Number.isInteger(c.target) && c.target < 100);
 });
 
 /* ---------------------------------------------------------------- 엔진·백테스트 */

@@ -289,7 +289,7 @@ function validateRows(rows: Row[]): string[] {
     problems.push(
       `시각이 역순인 봉: ${reversed.join(", ")}${
         reversedCount > reversed.length ? ` 외 ${reversedCount - reversed.length}건` : ""
-      } — 봉은 이른 시각부터 아래로 정렬해 주세요`
+      } — 봉을 시간순(오래된 봉 → 최신 봉)으로 정렬해 주세요. 국내 HTS 기본 내보내기처럼 최신 봉부터 내려오는 CSV는 위아래를 뒤집어 다시 붙여넣으면 됩니다`
     );
   }
   return problems;
