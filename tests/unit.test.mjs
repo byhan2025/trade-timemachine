@@ -17,6 +17,7 @@ import {
   avgRBreakdown,
   formatPct,
   formatPctValue,
+  formatMultiple,
   formatPrice,
   moneyLabel,
   COMBO_MODES,
@@ -646,6 +647,11 @@ test("v2.1.3 극단 입력 표기: 99,999.99원과 0.00001%가 반올림으로 �
   assert.equal(formatPct(0, 1), "0.0%");
   assert.equal(formatPctValue(1e-5, 2), "0.00001%");
   assert.equal(formatPctValue(2.75, 2), "2.75%");
+  // 배수: 극단 입력에서 0.00배로 사라지지 않는다
+  assert.equal(formatMultiple(0.0000024), "<0.01");
+  assert.equal(formatMultiple(2.75), "2.75");
+  assert.equal(formatMultiple(275229.36), "275,229.36");
+  assert.equal(formatMultiple(0), "0.00");
   // 원화 금액: 0.5원을 1원으로 올려 적지 않는다
   assert.equal(moneyLabel(0.5, "원"), "0.5원");
   assert.equal(moneyLabel(10_000_000, "원"), "10,000,000원");

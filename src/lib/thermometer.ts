@@ -1,5 +1,5 @@
 import type { Dataset } from "./types";
-import { formatPctValue } from "./format";
+import { formatMultiple, formatPctValue } from "./format";
 
 export interface SessionRange {
   date: string;
@@ -116,10 +116,10 @@ export function buildThermometer(
 
   // 고저폭은 방향·진입 후 경로를 구분하지 않으므로 band 별 문장도 사실만 말한다.
   const bandFact: Record<ThermometerBand, string> = {
-    tight: `손절폭 ${formatPctValue(stopPctPct, 2)}는 최근 ${ranges.length}세션 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${ratio.toFixed(2)}배로, 평균 고저폭보다 좁습니다.`,
-    narrow: `손절폭 ${formatPctValue(stopPctPct, 2)}는 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${ratio.toFixed(2)}배로, 평균보다 조금 좁습니다.`,
-    similar: `손절폭 ${formatPctValue(stopPctPct, 2)}는 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${ratio.toFixed(2)}배로, 평균과 비슷한 범위입니다.`,
-    wide: `손절폭 ${formatPctValue(stopPctPct, 2)}는 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${ratio.toFixed(2)}배로, 평균보다 넓습니다.`,
+    tight: `손절폭 ${formatPctValue(stopPctPct, 2)}는 최근 ${ranges.length}세션 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${formatMultiple(ratio)}배로, 평균 고저폭보다 좁습니다.`,
+    narrow: `손절폭 ${formatPctValue(stopPctPct, 2)}는 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${formatMultiple(ratio)}배로, 평균보다 조금 좁습니다.`,
+    similar: `손절폭 ${formatPctValue(stopPctPct, 2)}는 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${formatMultiple(ratio)}배로, 평균과 비슷한 범위입니다.`,
+    wide: `손절폭 ${formatPctValue(stopPctPct, 2)}는 평균 일중 고저폭 ${formatPctValue(avgRangePct, 2)}의 ${formatMultiple(ratio)}배로, 평균보다 넓습니다.`,
   };
   const neutral =
     `일중 고저폭(고가−저가)이 내 손절폭보다 큰 날이 ${exceededSessions}일 있었으나, ` +

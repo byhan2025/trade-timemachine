@@ -11,7 +11,7 @@ export { sizePosition, SHORT_DISCLOSURE, EXTREME_STOP_RATIO } from "../src/lib/s
 export { buildStopLevels, compareCombos, pickBestCell } from "../src/lib/combos";
 export { simulateSurvival } from "../src/lib/survival";
 export { summaryLines, avgRBreakdown } from "../src/lib/summary";
-export { formatPct, formatPctValue, formatPrice, formatWon, formatR, moneyLabel } from "../src/lib/format";
+export { formatPct, formatPctValue, formatMultiple, formatPrice, formatWon, formatR, moneyLabel } from "../src/lib/format";
 export {
   COMBO_MODES,
   bestBadgeText,

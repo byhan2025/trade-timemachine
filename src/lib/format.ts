@@ -69,6 +69,19 @@ export function formatPctValue(v: number, digits = 2): string {
   return `${v.toFixed(d)}%`;
 }
 
+/**
+ * 배수 표기 — 0.01배 미만은 `<0.01`로 적어 0.00배로 값이 사라지지 않게 하고,
+ * 1,000배 이상은 세 자리 쉼표로 읽기 쉽게 쓴다.
+ */
+export function formatMultiple(x: number, digits = 2): string {
+  if (!isFinite(x)) return "-";
+  const abs = Math.abs(x);
+  if (abs === 0) return (0).toFixed(digits);
+  if (abs < 0.01) return "<0.01";
+  if (abs >= 1000) return x.toLocaleString("ko-KR", { maximumFractionDigits: digits });
+  return x.toFixed(digits);
+}
+
 export function formatSigned(x: number, digits = 0, suffix = ""): string {
   const s = formatNumber(Math.abs(x), digits);
   if (x > 0) return `+${s}${suffix}`;

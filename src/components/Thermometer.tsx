@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Thermometer } from "../lib/thermometer";
-import { formatPctValue } from "../lib/format";
+import { formatMultiple, formatPctValue } from "../lib/format";
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -15,12 +15,6 @@ function useWidth<T extends HTMLElement>() {
     return () => ro.disconnect();
   }, []);
   return { ref, width };
-}
-
-/** 배율 표시 — 1,000배 이상은 세 자리 쉼표로 읽기 쉽게 쓴다 */
-function multipleText(v: number): string {
-  if (!isFinite(v)) return "-";
-  return v >= 1000 ? v.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : v.toFixed(2);
 }
 
 /**
@@ -85,10 +79,10 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           <strong className="thermo-row-value">{formatPctValue(stopLine, 2)}</strong>
         </div>
         <p className="thermo-ratio">
-          <span className={`thermo-badge ${thermo.band}`}>손절 ÷ 평균 고저폭 = {thermo.ratio.toFixed(2)}배</span>
+          <span className={`thermo-badge ${thermo.band}`}>손절 ÷ 평균 고저폭 = {formatMultiple(thermo.ratio)}배</span>
           {hasRemain && (
             <span className="thermo-badge light" data-testid="thermo-remain-badge">
-              손절 ÷ 남은 구간 = {multipleText(thermo.remainRatio)}배
+              손절 ÷ 남은 구간 = {formatMultiple(thermo.remainRatio)}배
             </span>
           )}
           <span className="muted small">
@@ -194,7 +188,7 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           <li data-testid="thermo-remain-fact">
             진입 후 남은 {thermo.remainBars}봉 고저폭 중앙{" "}
             {formatPctValue(thermo.remainMedianPct, 2)} (내 손절의{" "}
-            {multipleText(thermo.remainMultipleStop)}배)
+            {formatMultiple(thermo.remainMultipleStop)}배)
           </li>
         )}
       </ul>
