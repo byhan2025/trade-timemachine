@@ -5,6 +5,7 @@ import {
   RELAY_PENDING_NOTE,
   searchStocks,
   StockApiError,
+  STOCK_API_CONFIGURED,
 } from "../lib/stockApi";
 import type { RelayState, StockHit } from "../lib/stockApi";
 
@@ -54,8 +55,9 @@ export function StockSearch({ onPick, busy }: Props) {
 
   const trimmed = query.trim();
 
-  /* 앱을 열면 중계 서버가 응답하는지 한 번 확인한다(응답하면 자동으로 정상 모드) */
+  /* 운영자가 VITE_STOCK_API_URL 로 중계 서버를 지정했을 때만 열면서 응답을 확인한다(응답하면 자동 정상 모드) */
   useEffect(() => {
+    if (!STOCK_API_CONFIGURED) return;
     const ctrl = new AbortController();
     let alive = true;
     probeRelay(ctrl.signal).then((state) => {

@@ -13,6 +13,16 @@ export const STOCK_API_URL: string = (() => {
   return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_ENDPOINT;
 })();
 
+/**
+ * 운영자가 VITE_STOCK_API_URL 로 자기 중계 서버를 지정했는지.
+ * 기본 엔드포인트(stock-bars)는 아직 미배포이므로, 지정된 서버가 있을 때만 앱을 열 때 상태를 확인한다.
+ * (지정이 없으면 대기 중 안내를 바로 보여주고, 실제 검색이 성공하는 순간 정상 모드로 바뀐다.)
+ */
+export const STOCK_API_CONFIGURED: boolean = (() => {
+  const fromEnv = (import.meta.env.VITE_STOCK_API_URL as string | undefined)?.trim();
+  return !!fromEnv && fromEnv.length > 0;
+})();
+
 /** 중계 서버에 닿지 못할 때 화면에 그대로 보여주는 문구 */
 export const RELAY_OFFLINE_MESSAGE =
   "실시간 시세 서버 연결 대기 중 — 내장 5종목 및 CSV/JSON 붙여넣기는 즉시 사용 가능";
@@ -81,10 +91,15 @@ const PROBE_TIMEOUT_MS = 5000;
  */
 export async function probeRelay(signal?: AbortSignal): Promise<RelayState> {
   if (signal?.aborted) return "offline";
+  if (!probeOnce) probeOnce = runProbe();
+  return probeOnce;
+}
+
+let probeOnce: Promise<RelayState> | null = null;
+
+async function runProbe(): Promise<RelayState> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
-  const onAbort = () => controller.abort();
-  signal?.addEventListener("abort", onAbort);
   try {
     const res = await fetch(`${STOCK_API_URL}?health=1`, {
       method: "GET",
@@ -100,7 +115,6 @@ export async function probeRelay(signal?: AbortSignal): Promise<RelayState> {
     return "offline";
   } finally {
     window.clearTimeout(timer);
-    signal?.removeEventListener("abort", onAbort);
   }
 }
 
