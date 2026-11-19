@@ -5,20 +5,21 @@ import { buildThermometer } from "../lib/thermometer";
 import { buildStopLevels, compareCombos } from "../lib/combos";
 import type { ComboResult } from "../lib/combos";
 import { simulateSurvival } from "../lib/survival";
-import { summaryLines, avgRBreakdown } from "../lib/summary";
-import { formatPct, formatPrice, formatR, moneyLabel } from "../lib/format";
-import {
-  GREEN_BREAKDOWN,
-  GREEN_LABEL,
-  RISK_FORMULA_ABS,
-  greenGloss,
-  rGloss,
-  type ComboMode,
-} from "../lib/terms";
+import { formatPct, formatPrice, formatR } from "../lib/format";
+import { COMBO_MULTIPLE_NOTE, GREEN_BREAKDOWN, GREEN_LABEL, easyGlossary } from "../lib/terms";
+import type { ComboMode } from "../lib/terms";
 import { EXTREME_STOP_RATIO } from "../lib/sizing";
+import {
+  TRAFFIC_BASIS,
+  easyMathDetail,
+  easyMoneyChip,
+  easySummary,
+  easyThermometerLine,
+} from "../lib/easy";
 import { ThermometerView } from "./Thermometer";
 import { ComboTable } from "./ComboTable";
 import { SurvivalChart } from "./SurvivalChart";
+import { SizingCard } from "./SizingCard";
 
 interface Props {
   run: RunResult;
@@ -92,24 +93,37 @@ export function ReportView({ run, stale, onBack }: Props) {
     });
   }, [run.sim, effectiveRiskPct, run.plan.account]);
 
-  const lines = summaryLines({
-    sim: run.sim,
-    target: run.plan.target,
-    stop: run.plan.stop,
-    rr: run.size.rr,
-    unit,
-  });
-  const breakdown = avgRBreakdown(run.sim);
   /** 계산된(또는 계산될) 고유 조합 수 — 손절가 호가 단위 중복 제거로 9보다 작을 수 있다 */
   const comboCount = combos ? combos.cells.length : levels.length * 3;
   /** 손절폭이 진입가의 0.01% 미만이면 가격·퍼센트가 반올림으로 뭉개지지 않게 따로 알린다 */
   const extremeStop = stopPct > 0 && stopPct < EXTREME_STOP_RATIO;
 
+  const easy = easySummary({
+    sim: run.sim,
+    oneR: run.size.maxLoss,
+    shares: run.size.shares,
+    unit,
+    side: run.plan.side,
+    ratio: thermo.ratio,
+    rr: run.size.rr,
+    sessions: run.dataset.meta.sessionsUsed,
+    extreme: extremeStop,
+  });
+  const moneyChip = easyMoneyChip({
+    avgR: run.sim.avgR,
+    oneR: run.size.maxLoss,
+    unit,
+    shares: run.size.shares,
+  });
+  const detail = easyMathDetail({ sim: run.sim, oneR: run.size.maxLoss, unit });
+  const glossary = easyGlossary(run.plan.side);
+  const sharesWord = run.plan.side === "buy" ? "사야" : "팔아야";
+
   return (
     <div className="report" data-testid="report">
       <div className="report-head">
         <div>
-          <p className="report-kicker">2. 최종 해석 리포트</p>
+          <p className="report-kicker">2. 최종 해석 리포트 · 쉬운 말 버전</p>
           <h2 className="report-title">
             {run.dataset.name} · {run.plan.side === "buy" ? "매수" : "매도"} ·{" "}
             {run.dataset.times[run.plan.entryBar]} 진입
@@ -141,79 +155,95 @@ export function ReportView({ run, stale, onBack }: Props) {
         </p>
       )}
 
-      <div className="disclaimer inline" role="note">
-        <strong>투자 권유·매수/매도 신호가 아닙니다.</strong> 이 리포트는 방금 나온 과거 봉 재표본
-        결과를 쉽게 풀어 쓴 <strong>통계 해석 보조수단</strong>입니다. 미래 수익을 보장하지 않으며
-        원금 손실 가능.
-      </div>
-
-      <section className="card" aria-labelledby="rep-summary">
-        <h3 className="card-title" id="rep-summary">
-          1. 한눈에 보는 요약
-        </h3>
-        <ol className="summary-lines">
-          {lines.map((l, i) => (
+      {/* ---------------------------------------------------------------- 맨 위 결론 */}
+      <section className={`card verdict ${easy.level}`} aria-labelledby="rep-verdict">
+        <div className="verdict-top">
+          <h3 className="verdict-title" id="rep-verdict">
+            맨 먼저, 결론부터
+          </h3>
+          <span className={`traffic ${easy.level}`} data-testid="traffic-badge">
+            {easy.badge}
+          </span>
+          <span className="traffic-basis">
+            {TRAFFIC_BASIS} · <strong data-testid="traffic-money">{moneyChip}</strong>
+          </span>
+        </div>
+        <ol className="easy-lines" data-testid="summary-lines">
+          {easy.lines.map((l, i) => (
             <li key={i}>{l}</li>
           ))}
         </ol>
-        <div className="summary-stats">
-          <div>
-            <span className="stat-label">목표 도달</span>
-            <strong className="pos">{formatPct(run.sim.pTarget)}</strong>
+        {extremeStop && (
+          <p className="alert warn small verdict-caution" role="status" data-testid="extreme-caution">
+            손절폭이 진입가의 0.01% 미만으로 극단적으로 좁아요. 그래서 위 신호등과 3줄은 참고하기
+            어려워요 — 숫자가 실제보다 크게 보일 수 있어요.
+          </p>
+        )}
+        <details className="math-details" data-testid="math-details">
+          <summary>숫자·전문 산식 자세히 보기</summary>
+          <ul className="math-list" data-testid="avg-r-breakdown">
+            {detail.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+          <div className="summary-stats">
+            <div>
+              <span className="stat-label">목표 도달</span>
+              <strong className="pos">{formatPct(run.sim.pTarget)}</strong>
+            </div>
+            <div>
+              <span className="stat-label">손절 도달</span>
+              <strong className="neg">{formatPct(run.sim.pStop)}</strong>
+            </div>
+            <div>
+              <span className="stat-label">{GREEN_LABEL}</span>
+              <strong>{formatPct(run.sim.pGreen)}</strong>
+              <span className="stat-sub">{GREEN_BREAKDOWN}</span>
+            </div>
+            <div>
+              <span className="stat-label">1회 평균</span>
+              <strong className={run.sim.avgR >= 0 ? "pos" : "neg"}>{formatR(run.sim.avgR)}</strong>
+              <span className="stat-sub">미도달 포함</span>
+            </div>
           </div>
-          <div>
-            <span className="stat-label">손절 도달</span>
-            <strong className="neg">{formatPct(run.sim.pStop)}</strong>
-          </div>
-          <div>
-            <span className="stat-label">{GREEN_LABEL}</span>
-            <strong>{formatPct(run.sim.pGreen)}</strong>
-            <span className="stat-sub">{GREEN_BREAKDOWN}</span>
-          </div>
-          <div>
-            <span className="stat-label">1회 평균</span>
-            <strong className={run.sim.avgR >= 0 ? "pos" : "neg"}>{formatR(run.sim.avgR)}</strong>
-            <span className="stat-sub">미도달 포함</span>
-          </div>
-        </div>
-        <p className="term-note" data-testid="avg-r-breakdown">
-          1회 평균 {formatR(run.sim.avgR)} = 목표 {formatR(run.sim.rAtTarget)}×
-          {formatPct(run.sim.pTarget)} + 손절 −1R×{formatPct(run.sim.pStop)} ={" "}
-          {formatR(breakdown.twoValueR)}
-          {breakdown.neitherAvgR === null
-            ? " (미도달 0%라 그대로 같습니다)."
-            : ` + 미도달 ${formatPct(run.sim.pNeither)}×${formatR(breakdown.neitherAvgR)} (장 마감 종가 R).`}
-        </p>
+        </details>
         <p className="footnote">
-          1만 회 빈도는 미래 확률이 아니라 과거 봉 재표본 모형 결과입니다. 같은 봉 내 손절·목표 동시
-          도달 시 손절 우선 처리, 종료가 분포는 이후 장 마감까지 재생한 값입니다.
+          이 리포트는 지금까지의 과거 흐름을 다시 걸어 본 결과예요. 미래를 맞히는 값이 아니고,
+          매수·매도 신호도 아닙니다.
         </p>
       </section>
 
+      {/* ---------------------------------------------------------------- 1. 온도계 */}
       <section className="card" aria-labelledby="rep-thermo">
         <div className="card-head">
           <h3 className="card-title" id="rep-thermo">
-            2. 🌡️ 오늘의 흔들림 온도계
+            1. 하루 동안 주가가 얼마나 흔들리나요?
           </h3>
-          <span className="badge">평균 고저폭 vs 내 손절폭</span>
+          <span className="badge">최근 {thermo.sessions}일 평균 vs 내 손절폭</span>
         </div>
-        <p className="card-desc">
-          최근 {thermo.sessions}세션의 일중 고저폭(고가−저가 전체 범위) 평균과 내 손절폭을 나란히
-          놓고 비교했습니다.
+        <p className="easy-line" data-testid="easy-thermo">
+          {easyThermometerLine(thermo)}
         </p>
         <ThermometerView thermo={thermo} />
       </section>
 
+      {/* ---------------------------------------------------------------- 2. 조합표 */}
       <section className="card" aria-labelledby="rep-combos">
         <div className="card-head">
           <h3 className="card-title" id="rep-combos">
-            3. 🎯 {comboCount}가지 손절·목표 조합
+            2. 손절·목표 넓이를 바꾸면 결과가 어떻게 달라질까요?
           </h3>
-          <span className="badge">손절 {levels.length} × 목표 3</span>
+          <span className="badge">
+            손절 {levels.length} × 목표 3
+          </span>
         </div>
         <p className="card-desc">
-          내 진입가 {formatPrice(run.plan.entry, unit)} 기준으로 손절폭을 내 계획의 0.6배·1배·1.5배로
-          바꾸고, 목표를 1R·1.5R·2R로 두었을 때의 과거 통계입니다.
+          내 진입가 {formatPrice(run.plan.entry, unit)}을 그대로 두고, 손절폭을 내 계획의 0.6배·1배·1.5배로
+          넓히거나 좁히고 목표를 손절의 1배·1.5배·2배로 두었을 때예요. 칸마다 “100번 중 몇 번 이익으로
+          끝났는지”와 “1번에 평균 몇 배 남았는지”를 적었어요.
+        </p>
+        <p className="term-note" data-testid="combo-multiple-note">
+          {COMBO_MULTIPLE_NOTE}
         </p>
         {levels.length < 3 && (
           <p className="alert warn small" data-testid="combo-dedup-note">
@@ -227,6 +257,7 @@ export function ReportView({ run, stale, onBack }: Props) {
           unit={unit}
           mode={mode}
           onMode={setMode}
+          baseStopPct={stopPct}
         />
         {!combosBusy && !combos && (
           <p className="alert warn small">
@@ -236,19 +267,21 @@ export function ReportView({ run, stale, onBack }: Props) {
         )}
       </section>
 
+      {/* ---------------------------------------------------------------- 3. 생존 */}
       <section className="card" aria-labelledby="rep-survival">
         <div className="card-head">
           <h3 className="card-title" id="rep-survival">
-            4. 📉 연속 20회 매매 생존 시뮬레이션
+            3. 똑같이 20번 매매하면 100명 중 내 돈은 어디쯤 있을까요?
           </h3>
           <span className="badge">복리 · 현재 자금 기준</span>
         </div>
         <p className="card-desc">
-          방금 나온 1회 결과 분포(목표·손절·마감 확률과 R값)를 20번 연속 적용했을 때 계좌 자금이
-          어디로 가는지 봅니다. 100 = 시작 자금({moneyLabel(run.plan.account, unit)}).{" "}
+          방금 나온 1번 결과를 20번 연달아 해봤어요. 시작 자금을 100으로 놓고, 운을 각각 다르게 굴린{" "}
+          {survival ? survival.scenarios.toLocaleString("ko-KR") : "4,000"}명의 20번 뒤 자금을 줄 세운
+          그래프예요.{" "}
           {run.size.riskLimitedByCash
-            ? "1R은 계획한 허용 손실률이 아니라 수량 카드의 실제 최대 손실 기준입니다."
-            : "1R은 수량 카드의 실제 최대 손실 기준입니다."}
+            ? "1번에 거는 돈은 계획한 허용 손실률이 아니라 수량 카드의 실제 최대 손실 기준입니다."
+            : "1번에 거는 돈은 수량 카드의 실제 최대 손실 기준입니다."}
         </p>
         {survival ? (
           <SurvivalChart
@@ -267,50 +300,29 @@ export function ReportView({ run, stale, onBack }: Props) {
         )}
       </section>
 
+      {/* ---------------------------------------------------------------- 4. 수량 */}
+      <SizingCard
+        size={run.size}
+        unit={unit}
+        account={run.plan.account}
+        riskPct={run.plan.riskPct}
+        heading={`4. 한 번에 몇 주를 ${sharesWord} 할까요?`}
+        headingId="rep-sizing"
+      />
+
+      {/* ---------------------------------------------------------------- 5. 용어 */}
       <section className="card" aria-labelledby="rep-terms">
-        <h3 className="card-title" id="rep-terms">
-          5. 쉬운 용어 한 줄 풀이
-        </h3>
-        <div className="glossary">
-          <details>
-            <summary>R배수 — 손절폭을 1로 놓고 잰 수익·손실</summary>
-            <p data-testid="r-gloss">{rGloss(run.plan.side)}</p>
-            <p className="term-note">
-              1R = <strong>{RISK_FORMULA_ABS}</strong> = 이번 가정에서는{" "}
-              <strong>|{formatPrice(run.plan.entry, unit)} − {formatPrice(run.plan.stop, unit)}|</strong>{" "}
-              = {formatPrice(run.size.riskPerShare, unit)}
-            </p>
-          </details>
-          <details>
-            <summary>손익비 — 1번 이길 때 버는 것과 1번 질 때 잃는 것의 비율</summary>
-            <p>
-              1:2면 목표에 닿을 때 2R을 벌고, 손절되면 1R을 잃습니다. 이익 마감률이 40%여도 손익비가
-              좋으면 남을 수 있고, 이익 마감률이 70%여도 손익비가 나쁘면 잃을 수 있습니다.
-            </p>
-          </details>
-          <details>
-            <summary>중앙값 — 딱 가운데 순서의 결과</summary>
-            <p>
-              결과를 줄 세웠을 때 한가운데 값입니다. 평균은 큰 값 하나에 끌려가지만 중앙값은
-              &ldquo;보통의 결과&rdquo;를 보여줍니다. 그래서 이 리포트는 종료가·자금 궤적을 중앙값으로
-              같이 보여줍니다.
-            </p>
-          </details>
-          <details>
-            <summary>기댓값 — 같은 계획을 여러 번 했을 때 1회당 평균</summary>
-            <p>
-              확률 × 이익을 모두 더한 1회 평균입니다. 예: 45%로 +2R, 55%로 −1R이면 기댓값은 0.45×2 −
-              0.55×1 = <strong>+0.35R</strong>. 과거 분포 가정일 뿐 미래 보장이 아닙니다. 이 리포트의
-              1회 평균은 목표·손절뿐 아니라 미도달(장 마감) 건의 종가 R까지 더한 값입니다.
-            </p>
-          </details>
-          <details>
-            <summary>
-              이익 마감률 — 목표 도달 + 목표 미도달 유리 마감(목표 도달률과 다름)
-            </summary>
-            <p data-testid="green-gloss">{greenGloss()}</p>
-          </details>
-        </div>
+        <details className="glossary-block">
+          <summary id="rep-terms">5. 어려운 말 한 줄 풀이 — 필요할 때 펼쳐 보기</summary>
+          <dl className="easy-glossary" data-testid="easy-glossary">
+            {glossary.map((g) => (
+              <div key={g.term}>
+                <dt>{g.term}</dt>
+                <dd>{g.plain}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       </section>
 
       <p className="report-foot">

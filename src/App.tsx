@@ -10,7 +10,7 @@ import { fetchStockBars, RELAY_OFFLINE_MESSAGE, StockApiError } from "./lib/stoc
 import type { RunResult } from "./lib/run";
 import { FanChart } from "./components/FanChart";
 import { ResultCards } from "./components/ResultCards";
-import { SizingCard } from "./components/SizingCard";
+import { SizingCard, isExtremeStop } from "./components/SizingCard";
 import { BacktestCard } from "./components/BacktestCard";
 import { DataNote } from "./components/DataNote";
 import { StockSearch } from "./components/StockSearch";
@@ -371,7 +371,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.1.3 · 최종 해석 리포트</span>
+        <span className="pill">v2.2.0 · 쉬운 해석 리포트</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -718,7 +718,7 @@ export default function App() {
                   <li>목표 도달 / 손절 도달 / 장 마감 미도달 확률</li>
                   <li>손실 한도 기준 계산 수량과 리스크 요약</li>
                   <li>과거 같은 셋업 백테스트와 경로 분포 차트</li>
-                  <li>쉬운 말로 풀어 주는 2. 최종 해석 리포트</li>
+                  <li>쉬운 말로 풀어 주는 2. 최종 해석 리포트(초등학생 눈높이)</li>
                 </ul>
               </section>
             )}
@@ -753,7 +753,8 @@ export default function App() {
                       </strong>
                     </p>
                     <p className="muted small">
-                      통계를 쉬운 말로 풀고, 흔들림 온도계·손절·목표 조합·20회 생존까지 한 페이지에 정리했습니다.
+                      신호등 결론부터 초등학생 눈높이로 풀고, 하루 흔들림·손절·목표 조합·20번 생존·수량까지
+                      한 페이지에 정리했습니다.
                     </p>
                   </div>
                   <button type="button" className="btn easy-btn" onClick={openReport} data-testid="open-report">
@@ -793,6 +794,7 @@ export default function App() {
                   unit={run.dataset.priceUnit}
                   account={run.plan.account}
                   riskPct={run.plan.riskPct}
+                  extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
                 />
 
                 <BacktestCard
@@ -833,7 +835,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.1.3 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.2.0 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>

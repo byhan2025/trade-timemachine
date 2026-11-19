@@ -113,3 +113,21 @@ export function moneyLabel(x: number, unit: string): string {
   if (unit === "USD" || unit === "$") return `$${formatNumber(x, 2)}`;
   return formatNumber(x, 0);
 }
+
+/**
+ * 그래프 축 눈금 글자 — 반올림 때문에 `100 · 100 · 100`처럼 겹치면
+ * 소수 자릿수를 하나씩 늘려 서로 다른 눈금으로 읽히게 한다(v2.2).
+ */
+export function axisLabels(values: number[], maxDigits = 2): string[] {
+  for (let d = 0; d <= maxDigits; d++) {
+    const labels = values.map((v) => formatNumber(v, d));
+    if (new Set(labels).size === labels.length) return labels;
+  }
+  return values.map((v) => String(v));
+}
+
+/** 변동이 눈에 보이지 않는 구간인지 — 100 기준 0.1% 미만이면 '변동 거의 없음'으로 적는다 */
+export function isFlatSpan(min: number, max: number, tol = 0.1): boolean {
+  if (!isFinite(min) || !isFinite(max)) return true;
+  return Math.abs(max - min) < tol;
+}

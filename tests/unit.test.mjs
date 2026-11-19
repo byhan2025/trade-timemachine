@@ -29,6 +29,32 @@ import {
   riskFormula,
   GREEN_LABEL,
   RISK_FORMULA_ABS,
+  SURVIVAL_LABELS,
+  COMBO_MULTIPLE_NOTE,
+  easyGlossary,
+  TRAFFIC_BADGES,
+  TRAFFIC_BASIS,
+  FLAT_R,
+  trafficLevel,
+  trafficBadge,
+  perHundred,
+  approxMoney,
+  avgMoneyPerTrade,
+  easyMoneyChip,
+  easyLine1,
+  easyLine2,
+  easyConclusion,
+  easySummary,
+  easyMathDetail,
+  easyThermometerLine,
+  easyProfitCount,
+  easyAvgMultiple,
+  easyStopLevelLabel,
+  easySizingLine,
+  survivalIndexText,
+  survivalFlatNote,
+  axisLabels,
+  isFlatSpan,
 } from "./.build/lib.mjs";
 
 /* ---------------------------------------------------------------- helpers */
@@ -832,4 +858,315 @@ test("v2.1.3 수량 카드 기댓값 각주: 포지션 방향과 실제 평균 R
   );
   // 기댓값 = 실제 최대 손실 × 평균 R 그대로
   assert.ok(Math.abs(buy.expectedValue - buy.maxLoss * buy.expectedR) < 1e-9);
+});
+
+
+/* ================================================================ v2.2 초등학생 눈높이 쉬운 리포트 */
+
+const V22_CSS = readFileSync("src/styles.css", "utf8");
+const ruleOf = (selector) => {
+  // 선택자 앞 줄바꿈까지 포함해 찾고, 여러 곳(묶음 선택자·하위 선택자)에 나오면
+  // font-size/min-height 를 실제로 담은 규칙을 고른다.
+  let from = 0;
+  let first = "";
+  for (let guard = 0; guard < 40; guard++) {
+    const i = V22_CSS.indexOf(`\n${selector}`, from);
+    if (i < 0) break;
+    const open = V22_CSS.indexOf("{", i);
+    const close = V22_CSS.indexOf("}", open);
+    if (open < 0 || close < 0) break;
+    const block = V22_CSS.slice(open, close);
+    if (!first) first = block;
+    if (/font-size:|min-height:/.test(block)) return block;
+    from = close;
+  }
+  return first;
+};
+const fontSizeOf = (selector) => {
+  const m = /font-size:\s*([\d.]+)px/.exec(ruleOf(selector));
+  return m ? Number(m[1]) : null;
+};
+
+test("v2.2 100번 기준 횟수: 세 비율을 최대잔여법으로 나눠 합이 정확히 100이 된다", () => {
+  assert.deepEqual(perHundred([0.242, 0.695, 0.063]), [24, 70, 6]);
+  const split = perHundred([0.333, 0.333, 0.334]);
+  assert.deepEqual(split, [33, 33, 34]);
+  assert.equal(split.reduce((a, b) => a + b, 0), 100);
+  // 1만 번 재생에서 흔한 어긋난 비율도 합 100을 지킨다
+  const odd = perHundred([0.2855, 0.7005, 0.014]);
+  assert.equal(odd.reduce((a, b) => a + b, 0), 100);
+  // 극단 입력: 목표 7.4% / 손절 92.6% / 미도달 0
+  assert.deepEqual(perHundred([0.074, 0.926, 0]), [7, 93, 0]);
+});
+
+test("v2.2 신호등: 평균 금액 기준 임계값과 배지 문구가 계획대로 고정된다", () => {
+  assert.equal(FLAT_R, 0.02);
+  assert.equal(trafficLevel(-0.182), "red");
+  assert.equal(trafficLevel(0.001), "yellow");
+  assert.equal(trafficLevel(0), "yellow");
+  assert.equal(trafficLevel(0.182), "green");
+  assert.equal(trafficBadge(-0.182), "🔴 손실 쪽이 더 많았어요");
+  assert.equal(trafficBadge(0.001), "🟡 반반에 가까워요");
+  assert.equal(trafficBadge(0.182), "🟢 유리한 편이에요 (참고)");
+  assert.equal(TRAFFIC_BADGES.yellow, "🟡 반반에 가까워요");
+  assert.equal(TRAFFIC_BASIS, "평균 금액 기준");
+});
+
+test("v2.2 쉬운 1줄: 100번 중 목표·손절·미도달 횟수를 방향에 맞게 말한다", () => {
+  const buy = easyLine1({ pTarget: 0.242, pStop: 0.695, pNeither: 0.063, side: "buy" });
+  assert.match(buy, /^100번 해보면 약 24번은 목표 가격까지 올라서 기분 좋게 끝났고/);
+  assert.match(buy, /70번은 손절 가격까지 내려가서 먼저 끝났어요/);
+  assert.match(buy, /나머지 6번은 장 끝날 때까지 둘 다 안 닿았어요/);
+  const counts = [...buy.matchAll(/(\d+)번/g)].map((m) => Number(m[1])).slice(1);
+  assert.deepEqual(counts, [24, 70, 6]);
+  assert.equal(counts.reduce((a, b) => a + b, 0), 100);
+  // 매도는 목표가 아래, 손절가 위 — 방향 단어가 뒤집힌다
+  const sell = easyLine1({ pTarget: 0.3, pStop: 0.6, pNeither: 0.1, side: "sell" });
+  assert.match(sell, /목표 가격까지 내려가서/);
+  assert.match(sell, /손절 가격까지 올라가서/);
+  // 목표 0%·미도달 0% 같은 특수 입력에서도 사실대로
+  const none = easyLine1({ pTarget: 0, pStop: 0.6, pNeither: 0.4, side: "buy" });
+  assert.match(none, /^목표 가격까지 간 경우는 없었고, 60번은/);
+  assert.ok(!none.includes("약 0번"));
+  const allNeither = easyLine1({ pTarget: 0, pStop: 0, pNeither: 1, side: "buy" });
+  assert.match(allNeither, /손절 가격까지 간 경우도 없었어요/);
+  assert.match(allNeither, /나머지 100번은/);
+});
+
+test("v2.2 쉬운 2줄: 수량 카드의 실제 1R 금액으로 원화 손익을 말한다", () => {
+  const line = easyLine2({ avgR: -0.182, oneR: 98_200, unit: "원", shares: 50 });
+  assert.match(line, /^내가 정한 손절 금액 98,200원을 1번 걸 때마다/);
+  assert.match(line, /평균적으로 약 17,900원씩 줄어드는 흐름이었어요\.$/);
+  const up = easyLine2({ avgR: 0.146, oneR: 100_000, unit: "원", shares: 10 });
+  assert.match(up, /약 14,600원씩 늘어나는/);
+  // 극단적으로 좁은 손절폭: 금액이 커 보인다는 안내를 같은 줄에 붙인다
+  const extreme = easyLine2({ avgR: 729.07, oneR: 1, unit: "원", shares: 100, extreme: true });
+  assert.match(extreme, /약 729원씩 늘어나는/);
+  assert.match(extreme, /극단적으로 좁은 손절폭이라 이 금액은 참고하기 어려워요/);
+  // 수량 0주면 금액 대신 방향만 (0원이라고 말하지 않는다)
+  const zero = easyLine2({ avgR: -0.18, oneR: 0, unit: "원", shares: 0 });
+  assert.match(zero, /수량이 0주라/);
+  assert.match(zero, /손실 쪽이었어요/);
+  assert.ok(!zero.includes("0원씩"));
+});
+
+test("v2.2 쉬운 3줄: 과거 일수·재생 횟수와 손절폭·목표 배수에 맞춰 결론이 달라진다", () => {
+  const common = { pTarget: 0.242, pStop: 0.695, sessions: 57, replays: 10000 };
+  const tight = easyConclusion({ ...common, avgR: -0.182, ratio: 0.237, rr: 2 });
+  assert.match(tight, /^과거 57일 흐름으로 10,000번 돌려보니, /);
+  assert.match(tight, /손절을 하루 흔들림보다 훨씬 가까이 두면/);
+  assert.match(tight, /목표를 손절의 2.00배로 멀리 둬도 지는 판이 더 무거워서/);
+  assert.match(tight, /1번 평균은 손실 쪽이었어요/);
+  const wide = easyConclusion({ ...common, avgR: 0.21, ratio: 2.4, rr: 2 });
+  assert.match(wide, /손절이 하루 흔들림보다 넓어서/);
+  assert.match(wide, /이길 때 버는 돈이 더 커서/);
+  const flat = easyConclusion({ ...common, avgR: 0.004, ratio: 1, rr: 1.5 });
+  assert.match(flat, /이익과 손실이 거의 반반이었어요/);
+});
+
+test("v2.2 3줄 요약 전체: 전문 용어 없이 100번·원화로만 말한다", () => {
+  const sim = {
+    replays: 10000,
+    pTarget: 0.242,
+    pStop: 0.695,
+    pNeither: 0.063,
+    pGreen: 0.287,
+    avgR: -0.182,
+    rAtTarget: 2,
+    barsLeft: 59,
+  };
+  const out = easySummary({
+    sim,
+    oneR: 98_200,
+    shares: 50,
+    unit: "원",
+    side: "buy",
+    ratio: 0.237,
+    rr: 2,
+    sessions: 57,
+  });
+  assert.equal(out.lines.length, 3);
+  assert.equal(out.level, "red");
+  assert.equal(out.badge, "🔴 손실 쪽이 더 많았어요");
+  const text = out.lines.join(" ");
+  for (const word of ["R", "백분위", "미도달", "기댓값", "손익비", "중앙값", "%"]) {
+    assert.ok(!text.includes(word), `쉬운 3줄에 '${word}'가 남아 있습니다: ${text}`);
+  }
+  assert.ok(text.includes("100번"));
+  assert.ok(text.includes("98,200원"));
+});
+
+test("v2.2 접이식 전문 산식: 비율·R 분해·1만 회 조건이 그대로 남는다", () => {
+  const sim = {
+    replays: 10000,
+    pTarget: 0.242,
+    pStop: 0.695,
+    pNeither: 0.063,
+    pGreen: 0.287,
+    avgR: -0.182,
+    rAtTarget: 2,
+    barsLeft: 59,
+  };
+  const items = easyMathDetail({ sim, oneR: 98_200, unit: "원" }).join("\n");
+  assert.match(items, /목표 도달 24\.2% · 손절 도달 69\.5% · 장 마감 미도달 6\.3%/);
+  assert.match(items, /이익 마감률 28\.7% = 목표 도달 24\.2% \+ 목표 미도달 유리 마감 4\.5%/);
+  assert.match(items, /1회 평균 −0\.18R = 목표 \+2\.00R×24\.2% \+ 손절 −1R×69\.5%/);
+  assert.match(items, /미도달 6\.3%×/);
+  assert.match(items, /−17,872원/);
+  assert.match(items, /1만 회 빈도는 미래 확률이 아니라/);
+});
+
+test("v2.2 온도계 한 줄: 하루 흔들림이 내 손절의 몇 배인지 쉬운 말로", () => {
+  const thermo = {
+    sessions: 57,
+    ranges: [],
+    avgRangePct: 4.22,
+    medianRangePct: 3.9,
+    minRangePct: 1,
+    maxRangePct: 9,
+    avgBarRangePct: 0.5,
+    remainMedianPct: 2.75,
+    remainAvgPct: 2.8,
+    remainRatio: 0.36,
+    remainMultipleStop: 2.75,
+    remainBars: 59,
+    stopPct: 0.01,
+    ratio: 0.237,
+    exceededSessions: 57,
+    exceededPct: 1,
+    band: "tight",
+    headline: "",
+    verdict: "",
+  };
+  const line = easyThermometerLine(thermo);
+  assert.match(line, /^보통 하루에 4\.22%씩 출렁이는데/);
+  assert.match(line, /내 손절폭\(1\.00%\)이 그보다 4\.22배나 좁아서 지나가는 바람에도 툭 닿을 수 있어요/);
+  // 손절이 더 넓으면 반대로 말한다
+  const wide = easyThermometerLine({ ...thermo, stopPct: 0.08 });
+  assert.match(wide, /넓어서 잠깐 흔들리는 정도로는 잘 안 닿아요/);
+  // 극단 입력은 배수 폭주 대신 '사실상 0'으로
+  const extreme = easyThermometerLine({ ...thermo, stopPct: 0.0000001 });
+  assert.match(extreme, /사실상 0에 가까울 만큼 좁아요/);
+  assert.match(extreme, /극단적으로 좁은 손절폭이라 참고하기 어려워요/);
+});
+
+test("v2.2 조합표 칸: '100번 중 N번 이익'·'평균 +0.13배'로 읽고 1% 미만은 1,000번 기준", () => {
+  assert.equal(easyProfitCount(0.29), "100번 중 29번 이익");
+  assert.equal(easyProfitCount(0.005), "100번 중 1번 이익");
+  assert.equal(easyProfitCount(0.0012), "1,000번 중 1번 이익");
+  assert.equal(easyProfitCount(0), "100번 중 0번 이익");
+  assert.equal(easyProfitCount(1), "100번 중 100번 이익");
+  assert.equal(easyAvgMultiple(0.13), "평균 +0.13배");
+  assert.equal(easyAvgMultiple(-0.05), "평균 −0.05배");
+  assert.equal(easyAvgMultiple(0.004), "평균 ±0.00배");
+  assert.equal(easyAvgMultiple(0.008), "평균 +<0.01배");
+  assert.equal(easyAvgMultiple(-0.008), "평균 −<0.01배");
+});
+
+test("v2.2 조합표 행: 손절폭을 '내 계획의 0.6배·1배·1.5배'로 읽는다", () => {
+  assert.equal(easyStopLevelLabel(0.006, 0.01), "내 계획의 0.6배");
+  assert.equal(easyStopLevelLabel(0.01, 0.01), "내 계획 그대로");
+  assert.equal(easyStopLevelLabel(0.015, 0.01), "내 계획의 1.5배");
+  assert.match(COMBO_MULTIPLE_NOTE, /손절 금액을 1로 봤을 때/);
+  assert.match(COMBO_MULTIPLE_NOTE, /13%/);
+});
+
+test("v2.2 수량 카드 한 줄: 사야/팔아야·극단 입력·0주를 구분해 말한다", () => {
+  const base = {
+    shares: 50,
+    side: "buy",
+    account: 10_000_000,
+    riskPct: 1,
+    lossBudget: 100_000,
+    maxLoss: 98_200,
+    effectiveRiskPct: 0.982,
+    riskLimitedByCash: false,
+    unit: "원",
+    extreme: false,
+  };
+  const buy = easySizingLine(base);
+  assert.match(buy, /계산하면 50주예요/);
+  assert.match(buy, /이만큼 사면 손절될 때 약 98,200원을 잃어요/);
+  assert.ok(!buy.includes("원를"));
+  const sell = easySizingLine({ ...base, side: "sell" });
+  assert.match(sell, /이만큼 \(빌려서\) 팔면/);
+  const limited = easySizingLine({ ...base, riskLimitedByCash: true, effectiveRiskPct: 0.00001, maxLoss: 1 });
+  assert.match(limited, /계좌 금액 한도에 먼저 걸려서/);
+  assert.match(limited, /0\.00001%/);
+  const extreme = easySizingLine({ ...base, extreme: true });
+  assert.match(extreme, /극단적으로 좁은 손절폭이라 이 숫자는 참고하기 어려워요/);
+  const zero = easySizingLine({ ...base, shares: 0, maxLoss: 0 });
+  assert.match(zero, /1주도 계산되지 않았어요/);
+});
+
+test("v2.2 생존 그래프: 100·100·100 겹침을 피하고 등수 이름을 쓴다", () => {
+  // 축 눈금이 반올림으로 겹치면 소수 자릿수를 늘린다
+  const collapsed = axisLabels([100.0178, 100.15, 100.2824]);
+  assert.equal(new Set(collapsed).size, 3, collapsed.join(" / "));
+  const same = axisLabels([99.939, 100, 100.061]);
+  assert.equal(new Set(same).size, 3, same.join(" / "));
+  const normal = axisLabels([90, 97, 104]);
+  assert.deepEqual(normal, ["90", "97", "104"]);
+  // 변동 0.1 미만이면 '변동 거의 없음'
+  assert.equal(isFlatSpan(100, 100.05), true);
+  assert.equal(isFlatSpan(100, 100.3), false);
+  assert.equal(survivalFlatNote(99.99, 100.01), "변동 거의 없음 (99.99~100.01)");
+  // 평평하면 소수 둘째 자리까지 적는다
+  assert.equal(survivalIndexText(99.99, true), "99.99");
+  assert.equal(survivalIndexText(99.99, false), "100.0");
+  assert.equal(SURVIVAL_LABELS.high, "운이 좋았던 상위 10등");
+  assert.equal(SURVIVAL_LABELS.mid, "딱 중간 50등");
+  assert.equal(SURVIVAL_LABELS.low, "운이 나빴던 하위 10등");
+});
+
+test("v2.2 금액 반올림: 읽기 쉽게 줄이되 0원으로 지우지 않는다", () => {
+  assert.equal(approxMoney(17_824, "원"), "17,800원");
+  assert.equal(approxMoney(98_200, "원"), "98,200원");
+  assert.equal(approxMoney(1_234, "원"), "1,230원");
+  assert.equal(approxMoney(0.18, "원"), "0.18원");
+  assert.equal(approxMoney(729.07, "원"), "729원");
+  assert.equal(avgMoneyPerTrade(-0.182, 98_200).toFixed(2), "-17872.40");
+  assert.equal(easyMoneyChip({ avgR: -0.182, oneR: 98_200, unit: "원", shares: 50 }), "1번에 평균 17,900원 손해");
+  assert.equal(easyMoneyChip({ avgR: 0.146, oneR: 100_000, unit: "원", shares: 10 }), "1번에 평균 14,600원 이익");
+  assert.equal(easyMoneyChip({ avgR: 0.001, oneR: 98_200, unit: "원", shares: 50 }), "1번에 평균 거의 본전");
+  assert.equal(easyMoneyChip({ avgR: -0.18, oneR: 0, unit: "원", shares: 0 }), "1번 결과 평균은 손실 쪽");
+});
+
+test("v2.2 쉬운 용어 풀이: 6개 항목이 한 문장씩, R·배·이익 마감률·중앙값을 초등학생 말로", () => {
+  const buy = easyGlossary("buy");
+  assert.equal(buy.length, 6);
+  const terms = buy.map((g) => g.term).join(" / ");
+  assert.match(terms, /R — 내가 정한 손절 금액 1번/);
+  assert.match(terms, /배 — 평균 \+0\.13배/);
+  assert.match(terms, /이익으로 끝난 비율/);
+  assert.match(terms, /딱 중간 50등/);
+  assert.match(terms, /장 끝날 때까지 둘 다 안 닿음/);
+  assert.match(terms, /손절 금액 \(1R 금액\)/);
+  const r = buy[0].plain;
+  assert.match(r, /크기는 항상 양수/);
+  assert.match(r, /1R = 진입가 − 손절가/);
+  for (const g of buy) assert.ok(g.plain.length >= 30, g.term);
+  const sell = easyGlossary("sell");
+  assert.match(sell[0].plain, /1R = 손절가 − 진입가/);
+  assert.match(sell[0].plain, /매도/);
+});
+
+test("v2.2 CSS: 각주 12px 이상·신호등 18px/44px·단어 단위 줄바꿈·360px 조정", () => {
+  for (const sel of [".footnote", ".kv-sub", ".stat-sub", ".term-note", ".chart-note", ".kv-term", ".combo-col-head"]) {
+    const size = fontSizeOf(sel);
+    assert.ok(size !== null && size >= 12, `${sel} font-size=${size}`);
+  }
+  const traffic = ruleOf(".traffic");
+  assert.match(traffic, /min-height:\s*44px/);
+  assert.match(traffic, /font-size:\s*18px/);
+  assert.match(traffic, /word-break:\s*keep-all/);
+  const lines = ruleOf(".easy-lines");
+  assert.match(lines, /font-size:\s*15px/);
+  // 360px 이하에서도 신호등이 한 줄로 읽히게 글자를 줄이고 폭을 살린다
+  const narrow = V22_CSS.slice(V22_CSS.lastIndexOf("@media (max-width: 380px)"));
+  assert.match(narrow, /\.traffic \{[\s\S]*?font-size:\s*15\.5px/);
+  // 새 요소도 버튼·접이식 요약은 44px 이상
+  assert.match(ruleOf(".math-details > summary"), /min-height:\s*44px/);
+  assert.match(ruleOf(".glossary-block > summary"), /min-height:\s*44px/);
+  assert.match(ruleOf(".combo-cell"), /min-height:\s*64px/);
 });

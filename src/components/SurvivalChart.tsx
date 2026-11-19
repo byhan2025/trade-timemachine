@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { SurvivalResult } from "../lib/survival";
-import { formatPctValue, moneyLabel } from "../lib/format";
+import { axisLabels, formatPctValue, isFlatSpan, moneyLabel } from "../lib/format";
+import { SURVIVAL_LABELS } from "../lib/terms";
+import { survivalFlatNote, survivalIndexText } from "../lib/easy";
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -17,7 +19,12 @@ function useWidth<T extends HTMLElement>() {
   return { ref, width };
 }
 
-/** 📉 연속 20회 매매 생존 시뮬레이션 — 자금 궤적(중앙값 · 10번째 백분위 · 90번째 백분위) */
+/**
+ * 📉 20번 연속 매매 생존 — '100명 중 내 돈은 몇 등인가'로 읽는 그래프 (v2.2).
+ * 가운데 선 = 딱 중간 50등, 위·아래 선 = 운이 좋았던 상위 10등 / 운이 나빴던 하위 10등.
+ * 변동이 0.1% 미만이면 축 눈금이 `100 · 100 · 100`으로 겹치므로 소수 둘째 자리까지 적고
+ * '변동 거의 없음' 안내를 붙인다.
+ */
 export function SurvivalChart({
   survival,
   unit,
@@ -43,7 +50,7 @@ export function SurvivalChart({
   const compact = width < 520;
   const W = Math.max(280, width);
   const H = compact ? 208 : 244;
-  const padL = compact ? 42 : 52;
+  const padL = compact ? 46 : 54;
   const padR = compact ? 8 : 12;
   const padT = 14;
   const padB = 26;
@@ -53,9 +60,12 @@ export function SurvivalChart({
   const all = [...survival.p10, ...survival.p90, 100];
   const min = Math.min(...all);
   const max = Math.max(...all);
-  const span = max - min || 1;
-  const lo = min - span * 0.08;
-  const hi = max + span * 0.08;
+  const span = max - min;
+  /** 변동이 0.1% 미만 — 축 눈금이 겹치므로 소수 둘째 자리로 적고 안내를 붙인다 */
+  const flat = isFlatSpan(min, max);
+  const growth = Math.max(span, 1);
+  const lo = min - growth * 0.08;
+  const hi = max + growth * 0.08;
   const x = (i: number) => padL + (i / Math.max(1, survival.trades)) * plotW;
   const y = (v: number) => padT + ((hi - v) / (hi - lo)) * plotH;
 
@@ -73,9 +83,11 @@ export function SurvivalChart({
     .join(" ")} Z`;
 
   const yTicks = [lo + (hi - lo) * 0.12, (lo + hi) / 2, hi - (hi - lo) * 0.12];
+  const yLabels = axisLabels(yTicks);
   const xTicks = [0, 5, 10, 15, survival.trades].filter((v) => v <= survival.trades);
   /** 정수 주 내림 때문에 계획보다 아주 조금 작아진 경우(현금 한도와 구분해 적는다) */
   const roundingOnly = !cashLimited && Math.abs(riskPct - planRiskPct) > 1e-9;
+  const idx = (v: number) => survivalIndexText(v, flat);
 
   return (
     <div ref={ref} className="chart-wrap survival" data-testid="survival-chart">
@@ -84,17 +96,19 @@ export function SurvivalChart({
         height={H}
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label={`${survival.trades}회 연속 매매 시 자금 궤적. 중앙값 ${survival.finalMedianIdx.toFixed(
-          1
-        )}%, 10번째 백분위(하위 10% 흐름) ${survival.finalP10Idx.toFixed(1)}%, 90번째 백분위(상위 10% 흐름) ${survival.finalP90Idx.toFixed(1)}%.`}
+        aria-label={`${survival.trades}번 연속 매매 후 100명 중 자금 순위. ${SURVIVAL_LABELS.mid} ${idx(
+          survival.finalMedianIdx
+        )}, ${SURVIVAL_LABELS.low} ${idx(survival.finalP10Idx)}, ${SURVIVAL_LABELS.high} ${idx(
+          survival.finalP90Idx
+        )}.`}
       >
-        <title>{survival.trades}회 연속 매매 자금 궤적</title>
+        <title>{survival.trades}번 연속 매매 자금 순위</title>
         <rect x={0} y={0} width={W} height={H} fill="#ffffff" />
         {yTicks.map((v, i) => (
           <g key={i}>
             <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#eef2f8" strokeWidth={1} />
-            <text x={padL - 5} y={y(v) + 3} textAnchor="end" fontSize={9} fill="#7b8799">
-              {v.toFixed(0)}
+            <text x={padL - 5} y={y(v) + 3} textAnchor="end" fontSize={9} fill="#5b6676">
+              {yLabels[i]}
             </text>
           </g>
         ))}
@@ -108,7 +122,7 @@ export function SurvivalChart({
           strokeWidth={1.2}
           strokeDasharray="4 4"
         />
-        <text x={padL + 3} y={y(100) - 4} fontSize={9} fill="#64748b">
+        <text x={padL + 3} y={y(100) - 4} fontSize={9} fill="#475569">
           시작 100
         </text>
         <path d={line(survival.p90)} fill="none" stroke="#93c5fd" strokeWidth={1.4} />
@@ -120,7 +134,7 @@ export function SurvivalChart({
             x={x(t)}
             y={H - 8}
             fontSize={9}
-            fill="#7b8799"
+            fill="#5b6676"
             textAnchor={t === 0 ? "start" : t === survival.trades ? "end" : "middle"}
           >
             {t}회
@@ -128,55 +142,61 @@ export function SurvivalChart({
         ))}
         <line x1={padL} x2={padL} y1={padT} y2={padT + plotH} stroke="#cbd5e1" strokeWidth={1} />
       </svg>
+      <p className="chart-note" data-testid="survival-scale-note">
+        20번을 마친 뒤 남은 돈을 100명 순서로 줄 세운 값이에요(시작 = 100).{" "}
+        {flat
+          ? `${survivalFlatNote(min, max)} — 그래프가 거의 평평해요.`
+          : `그래프 세로축은 ${min.toFixed(1)}에서 ${max.toFixed(1)} 사이예요.`}
+      </p>
       <ul className="chart-legend">
         <li>
-          <span className="swatch swatch-median" /> 중앙값
+          <span className="swatch" style={{ background: "#93c5fd" }} /> {SURVIVAL_LABELS.high}
         </li>
         <li>
-          <span className="swatch" style={{ background: "#93c5fd" }} /> 90번째 백분위(상위 10% 흐름)
+          <span className="swatch swatch-median" /> {SURVIVAL_LABELS.mid}
         </li>
         <li>
-          <span className="swatch" style={{ background: "#fca5a5" }} /> 10번째 백분위(하위 10% 흐름)
+          <span className="swatch" style={{ background: "#fca5a5" }} /> {SURVIVAL_LABELS.low}
         </li>
       </ul>
 
       <div className="survival-stats">
         <div>
-          <span className="stat-label">{survival.trades}회 후 중앙값</span>
+          <span className="stat-label">{SURVIVAL_LABELS.mid}</span>
           <strong>
-            {survival.finalMedianIdx.toFixed(1)}
+            {idx(survival.finalMedianIdx)}
             <span className="muted small"> / 100</span>
           </strong>
           <span className="muted small">{moneyLabel(survival.finalMedian, unit)}</span>
         </div>
         <div>
-          <span className="stat-label">10번째 백분위(하위 10% 흐름)</span>
+          <span className="stat-label">{SURVIVAL_LABELS.low}</span>
           <strong className="neg">
-            {survival.finalP10Idx.toFixed(1)}
+            {idx(survival.finalP10Idx)}
             <span className="muted small"> / 100</span>
           </strong>
           <span className="muted small">{moneyLabel(survival.finalP10, unit)}</span>
         </div>
         <div>
-          <span className="stat-label">90번째 백분위(상위 10% 흐름)</span>
+          <span className="stat-label">{SURVIVAL_LABELS.high}</span>
           <strong className="pos">
-            {survival.finalP90Idx.toFixed(1)}
+            {idx(survival.finalP90Idx)}
             <span className="muted small"> / 100</span>
           </strong>
           <span className="muted small">{moneyLabel(survival.finalP90, unit)}</span>
         </div>
         <div>
-          <span className="stat-label">최대 연패</span>
+          <span className="stat-label">연달아 지는 최대 횟수</span>
           <strong>{survival.maxStreakP95}회</strong>
           <span className="muted small">
-            중앙 {survival.maxStreakMedian}회 · 최악 {survival.maxStreakMax}회
+            가운데 {survival.maxStreakMedian}회 · 최악 {survival.maxStreakMax}회
           </span>
         </div>
         <div data-testid="survival-one-r">
-          <span className="stat-label">1R 금액 (실제 최대 손실)</span>
+          <span className="stat-label">1번에 거는 돈</span>
           <strong>{moneyLabel(oneR, unit)}</strong>
           <span className="muted small">
-            계좌의 {formatPctValue(riskPct, 2)}
+            손절되면 이만큼 잃어요 · 계좌의 {formatPctValue(riskPct, 2)}
             {cashLimited
               ? ` · 계좌 현금 한도로 계획 ${formatPctValue(planRiskPct, 2)}보다 작아짐`
               : roundingOnly
@@ -186,24 +206,22 @@ export function SurvivalChart({
         </div>
       </div>
       <p className="footnote" data-testid="survival-footnote">
-        계좌 {moneyLabel(account, unit)}에서 매매마다 현재 자금의 {formatPctValue(riskPct, 2)}(1R ={" "}
-        {moneyLabel(oneR, unit)})만큼 위험을 걸고(복리) {survival.trades}회를 반복한{" "}
-        {survival.scenarios.toLocaleString("ko-KR")}개 시나리오입니다.
+        계좌 {moneyLabel(account, unit)}에서 매매마다 현재 자금의 {formatPctValue(riskPct, 2)}(1번에{" "}
+        {moneyLabel(oneR, unit)})만큼만 걸고(복리) {survival.trades}회를 반복한{" "}
+        {survival.scenarios.toLocaleString("ko-KR")}개 시나리오예요.
         {cashLimited && (
           <>
             {" "}
             <strong>
-              수량 카드에서 계좌 현금 한도가 먼저 걸려 실제 1회 최대 손실이 계획한 허용 손실(
+              수량 카드에서 계좌 현금 한도가 먼저 걸려 실제로 거는 돈이 계획한 허용 손실(
               {formatPctValue(planRiskPct, 2)} = {moneyLabel((account * planRiskPct) / 100, unit)})보다
-              작습니다. 그래서 이 그래프도 맹목적으로 계획 위험률을 쓰지 않고, 수량 카드의 실제
-              위험률({formatPctValue(riskPct, 2)})로 계산했습니다.
+              작습니다. 그래서 이 그래프도 계획 위험률을 그대로 쓰지 않고, 수량 카드의 실제 위험률(
+              {formatPctValue(riskPct, 2)})로 계산했습니다.
             </strong>
           </>
         )}{" "}
-        10번째·90번째 백분위는 그 시나리오들의 20회 후 자금을 낮은 순으로 세웠을 때 아래에서 10%,
-        위에서 10% 지점(서로 대칭인 하위 10%·상위 10% 흐름)입니다. 20회 후 시작 자금보다 적을 확률{" "}
-        {(survival.belowStartProb * 100).toFixed(0)}%. 미래 수익 예측이 아니라 분포 가정에 따른
-        참고치입니다.
+        20번 뒤 시작 자금보다 적을 확률은 {(survival.belowStartProb * 100).toFixed(0)}%예요. 미래 수익
+        예측이 아니라 분포 가정에 따른 참고치입니다.
       </p>
     </div>
   );

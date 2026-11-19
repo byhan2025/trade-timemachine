@@ -11,7 +11,17 @@ export { sizePosition, SHORT_DISCLOSURE, EXTREME_STOP_RATIO } from "../src/lib/s
 export { buildStopLevels, compareCombos, pickBestCell } from "../src/lib/combos";
 export { simulateSurvival } from "../src/lib/survival";
 export { summaryLines, avgRBreakdown } from "../src/lib/summary";
-export { formatPct, formatPctValue, formatMultiple, formatPrice, formatWon, formatR, moneyLabel } from "../src/lib/format";
+export {
+  formatPct,
+  formatPctValue,
+  formatMultiple,
+  formatPrice,
+  formatWon,
+  formatR,
+  moneyLabel,
+  axisLabels,
+  isFlatSpan,
+} from "../src/lib/format";
 export {
   COMBO_MODES,
   bestBadgeText,
@@ -22,4 +32,30 @@ export {
   expectedValueNote,
   GREEN_LABEL,
   RISK_FORMULA_ABS,
+  SURVIVAL_LABELS,
+  COMBO_MULTIPLE_NOTE,
+  easyGlossary,
 } from "../src/lib/terms";
+export {
+  TRAFFIC_BADGES,
+  TRAFFIC_BASIS,
+  FLAT_R,
+  trafficLevel,
+  trafficBadge,
+  perHundred,
+  approxMoney,
+  avgMoneyPerTrade,
+  easyMoneyChip,
+  easyLine1,
+  easyLine2,
+  easyConclusion,
+  easySummary,
+  easyMathDetail,
+  easyThermometerLine,
+  easyProfitCount,
+  easyAvgMultiple,
+  easyStopLevelLabel,
+  easySizingLine,
+  survivalIndexText,
+  survivalFlatNote,
+} from "../src/lib/easy";
