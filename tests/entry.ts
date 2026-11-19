@@ -7,6 +7,19 @@ export { buildPool } from "../src/lib/pool";
 export { simulate } from "../src/lib/simulate";
 export { historyReplay } from "../src/lib/backtest";
 export { buildThermometer } from "../src/lib/thermometer";
-export { sizePosition, SHORT_DISCLOSURE } from "../src/lib/sizing";
-export { buildStopLevels, compareCombos } from "../src/lib/combos";
+export { sizePosition, SHORT_DISCLOSURE, EXTREME_STOP_RATIO } from "../src/lib/sizing";
+export { buildStopLevels, compareCombos, pickBestCell } from "../src/lib/combos";
 export { simulateSurvival } from "../src/lib/survival";
+export { summaryLines, avgRBreakdown } from "../src/lib/summary";
+export { formatPct, formatPctValue, formatPrice, formatWon, formatR, moneyLabel } from "../src/lib/format";
+export {
+  COMBO_MODES,
+  bestBadgeText,
+  comboModeHint,
+  greenGloss,
+  riskFormula,
+  rGloss,
+  expectedValueNote,
+  GREEN_LABEL,
+  RISK_FORMULA_ABS,
+} from "../src/lib/terms";

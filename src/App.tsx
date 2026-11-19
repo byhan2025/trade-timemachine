@@ -371,7 +371,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.1.2 · 최종 해석 리포트</span>
+        <span className="pill">v2.1.3 · 최종 해석 리포트</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -833,7 +833,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.1.2 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.1.3 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>

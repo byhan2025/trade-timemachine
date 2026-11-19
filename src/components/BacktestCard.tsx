@@ -26,7 +26,7 @@ export function BacktestCard({
       <p className="card-desc">
         위 1만 회 재생과 <strong>다른 별도의 규칙</strong>입니다: 매 세션 첫 {orMinutes}분(봉{" "}
         {bt.rule.orBars}개)의 고가·저가를 오프닝 레인지로 잡고, 그 범위를 종가로 돌파한 봉에서 진입해
-        진입가 대비 <strong>{(bt.rule.stopPct * 100).toFixed(2)}% 손절</strong>,{" "}
+        진입가 대비 <strong>{formatPct(bt.rule.stopPct, 2)} 손절</strong>,{" "}
         <strong>{bt.rule.targetR.toFixed(2)}R 목표</strong>를 적용했습니다. 내가 입력한 진입가·손절가와는
         무관한 참고 비교입니다.
       </p>

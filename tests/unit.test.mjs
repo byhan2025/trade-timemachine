@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   parseCustom,
   buildPool,
@@ -11,6 +12,22 @@ import {
   simulateSurvival,
   sizePosition,
   SHORT_DISCLOSURE,
+  pickBestCell,
+  summaryLines,
+  avgRBreakdown,
+  formatPct,
+  formatPctValue,
+  formatPrice,
+  moneyLabel,
+  COMBO_MODES,
+  bestBadgeText,
+  comboModeHint,
+  greenGloss,
+  rGloss,
+  expectedValueNote,
+  riskFormula,
+  GREEN_LABEL,
+  RISK_FORMULA_ABS,
 } from "./.build/lib.mjs";
 
 /* ---------------------------------------------------------------- helpers */
@@ -565,4 +582,248 @@ test("백테스트: 목표 도달은 전체 진입 기준과 종료 건 기준�
   const decided = bt.target + bt.stop;
   const ended = decided ? bt.target / decided : 0;
   if (bt.close > 0) assert.ok(ended >= all);
+});
+
+/* ---------------------------------------------------------------- v2.1.3 4호 봇·부이 대리 6건 */
+
+test("v2.1.3 매도 R 설명: 1R = |진입가 − 손절가|, 방향별 식을 부호까지 구분한다", () => {
+  assert.equal(riskFormula("buy"), "진입가 − 손절가");
+  assert.equal(riskFormula("sell"), "손절가 − 진입가");
+  assert.match(RISK_FORMULA_ABS, /^\|진입가 − 손절가\|$/);
+
+  const buy = rGloss("buy");
+  assert.match(buy, /매수/);
+  assert.match(buy, /1R = 진입가 − 손절가/);
+  assert.ok(!/1R = 손절가 − 진입가/.test(buy));
+
+  const sell = rGloss("sell");
+  assert.match(sell, /매도/);
+  assert.match(sell, /1R = 손절가 − 진입가입니다/);
+  assert.match(sell, /\(항상 양수\)/);
+  // 매도에서 매수식만 적어 부호를 뒤집히게 하던 문구가 남아 있지 않다
+  assert.ok(!/1R = 진입가 − 손절가/.test(sell), sell);
+  assert.match(sell, /부호가 반대/);
+  assert.match(rGloss("buy"), new RegExp(RISK_FORMULA_ABS.replace(/\|/g, "\\|")));
+});
+
+test("v2.1.3 매도 수량 카드: 위험폭 식도 손절가 − 진입가로 적고 값은 항상 양수다", () => {
+  const buy = sizePosition({
+    entry: 100_000,
+    stop: 99_000,
+    target: 102_000,
+    account: 10_000_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: 0.2,
+  });
+  const sell = sizePosition({
+    entry: 100_000,
+    stop: 101_000,
+    target: 98_000,
+    account: 10_000_000,
+    riskPct: 1,
+    side: "sell",
+    expectedR: 0.2,
+  });
+  assert.equal(buy.riskFormula, "진입가 − 손절가");
+  assert.equal(sell.riskFormula, "손절가 − 진입가");
+  assert.equal(buy.riskPerShare, 1_000);
+  assert.equal(sell.riskPerShare, 1_000);
+  assert.ok(sell.riskPerShare > 0);
+  assert.equal(sell.rr, 2);
+});
+
+test("v2.1.3 극단 입력 표기: 99,999.99원과 0.00001%가 반올림으로 사라지지 않는다", () => {
+  // 가격: 원 단위에서도 소수 입력은 그대로 보인다(100,000원 / 99,999.99원이 구분됨)
+  assert.equal(formatPrice(100_000, "원"), "100,000원");
+  assert.equal(formatPrice(99_999.99, "원"), "99,999.99원");
+  assert.notEqual(formatPrice(100_000, "원"), formatPrice(99_999.99, "원"));
+  assert.equal(formatPrice(0.01, "원"), "0.01원");
+  // 퍼센트: 0.00%로 뭉개지면 소수를 늘려 적는다
+  assert.equal(formatPct(1e-7), "0.00001%");
+  assert.equal(formatPct(1e-5, 2), "0.001%");
+  assert.equal(formatPct(0.434), "43.4%");
+  assert.equal(formatPct(0, 1), "0.0%");
+  assert.equal(formatPctValue(1e-5, 2), "0.00001%");
+  assert.equal(formatPctValue(2.75, 2), "2.75%");
+  // 원화 금액: 0.5원을 1원으로 올려 적지 않는다
+  assert.equal(moneyLabel(0.5, "원"), "0.5원");
+  assert.equal(moneyLabel(10_000_000, "원"), "10,000,000원");
+});
+
+test("v2.1.3 극단 입력: 현금 상한이 걸리면 실제 위험률(effectiveRiskPct)로 1R을 다시 정한다", () => {
+  const account = 10_000_000;
+  const size = sizePosition({
+    entry: 100_000,
+    stop: 99_999.99,
+    target: 100_100,
+    account,
+    riskPct: 1,
+    side: "buy",
+    expectedR: -0.18,
+  });
+  // 계좌 현금 한도 100주 → 실제 최대 손실 1원 (계획 허용 손실 100,000원이 아니다)
+  assert.equal(size.shares, 100);
+  assert.equal(size.boundBy, "계좌 금액");
+  assert.ok(Math.abs(size.maxLoss - 1) < 1e-9, `maxLoss=${size.maxLoss}`);
+  assert.equal(size.riskLimitedByCash, true);
+  assert.ok(Math.abs(size.effectiveRiskPct - 1e-5) < 1e-9, `effectiveRiskPct=${size.effectiveRiskPct}`);
+  // 유효 위험률의 정의 그대로: 실제 최대 손실 ÷ 계좌
+  assert.ok(Math.abs((size.maxLoss / account) * 100 - size.effectiveRiskPct) < 1e-15);
+  // 극단적으로 좁은 손절폭 경고 1줄
+  assert.ok(
+    size.warnings.some((w) => /0\.01% 미만/.test(w) && /극단적으로 좁습니다/.test(w)),
+    size.warnings.join(" / ")
+  );
+  // 계획 위험률(1%)을 그대로 쓰면 1R = 100,000원이라 수량 카드(1원)와 모순된다 — 그래서 생존 시뮬레이션은 유효 위험률을 쓴다
+  assert.ok(Math.abs(account * 0.01 - size.maxLoss) > 1);
+
+  const surv = simulateSurvival({
+    rSamples: Float64Array.from({ length: 50 }, () => -1),
+    trades: 1,
+    riskPct: size.effectiveRiskPct,
+    startEquity: account,
+    scenarios: 50,
+    seed: 3,
+  });
+  assert.equal(surv.riskPct, size.effectiveRiskPct);
+  assert.ok(Math.abs(surv.oneR - size.maxLoss) < 1e-6, `oneR=${surv.oneR} vs maxLoss=${size.maxLoss}`);
+  // -1R 한 번 = 계좌가 정확히 maxLoss만큼 줄어든다 (수량 카드와 같은 1R)
+  const afterOne = (surv.median[1] / 100) * account;
+  assert.ok(Math.abs(account - afterOne - size.maxLoss) < 1e-6, `afterOne=${afterOne}`);
+});
+
+test("v2.1.3 이익 마감률: 주 라벨·풀이에서 '승률'을 쓰지 않고 목표 도달률과 구분한다", () => {
+  assert.equal(GREEN_LABEL, "이익 마감률");
+  const texts = [
+    ...COMBO_MODES.flatMap((m) => [m.label, m.hint]),
+    bestBadgeText("green", false),
+    bestBadgeText("avgR", false),
+    bestBadgeText("green", true),
+    comboModeHint("green"),
+    comboModeHint("avgR"),
+    greenGloss(),
+  ];
+  for (const t of texts) {
+    assert.ok(!t.includes("승률"), `'승률'이 남아 있습니다: ${t}`);
+    assert.ok(!t.includes("손익비 추구형"), `'손익비 추구형'이 남아 있습니다: ${t}`);
+  }
+  assert.ok(COMBO_MODES.some((m) => m.label.includes(GREEN_LABEL)));
+  assert.ok(COMBO_MODES.some((m) => /평균 R/.test(m.label)));
+  assert.equal(bestBadgeText("green", false), "이익 마감률 최고");
+  assert.equal(bestBadgeText("avgR", false), "평균 R 최고");
+  assert.match(bestBadgeText("avgR", true), /^가장 높았던 칸\(참고\) · 평균 R 기준$/);
+  assert.match(bestBadgeText("green", true), /^가장 높았던 칸\(참고\) · 이익 마감률 기준$/);
+  const gloss = greenGloss();
+  assert.match(gloss, /목표 도달 \+ 목표 미도달 유리 마감/);
+  assert.match(gloss, /목표 도달률/);
+  assert.match(gloss, /다릅니다/);
+});
+
+test("v2.1.3 성향 토글: '평균 R(기댓값) 우선'은 실제로 avgR 최고 칸을, '이익 마감률 우선'은 pGreen 최고 칸을 고른다", () => {
+  const cell = (stopPct, targetR, pGreen, avgR) => ({
+    stopPct,
+    stop: 100 - stopPct * 100,
+    targetR,
+    target: 100 + targetR,
+    pTarget: pGreen / 2,
+    pStop: 0.2,
+    pNeither: 0.1,
+    pGreen,
+    avgR,
+  });
+  const cells = [cell(0.01, 1, 0.62, -0.1), cell(0.02, 1, 0.55, 0.44), cell(0.03, 1, 0.5, 0.2)];
+  assert.equal(pickBestCell(cells, "green").pGreen, 0.62);
+  assert.equal(pickBestCell(cells, "green").stopPct, 0.01);
+  assert.equal(pickBestCell(cells, "avgR").avgR, 0.44);
+  assert.equal(pickBestCell(cells, "avgR").stopPct, 0.02);
+  assert.equal(pickBestCell([], "green"), null);
+});
+
+test("v2.1.3 요약 2줄: '미도달 포함'과 두 값만 더한 값의 차이를 같은 줄에서 보여 준다", () => {
+  const sim = {
+    replays: 10000,
+    pTarget: 0.43,
+    pStop: 0.52,
+    pNeither: 0.05,
+    pGreen: 0.46,
+    avgR: -0.18,
+    rAtTarget: 2,
+    barsLeft: 59,
+  };
+  const b = avgRBreakdown(sim);
+  assert.ok(Math.abs(b.twoValueR - (0.43 * 2 - 0.52)) < 1e-12);
+  assert.ok(b.neitherAvgR !== null);
+  // 1회 평균 = 목표 몫 + 손절 몫 + 미도달 몫 (되돌려 검산)
+  assert.ok(Math.abs(0.43 * 2 - 0.52 + 0.05 * b.neitherAvgR - sim.avgR) < 1e-12);
+
+  const [first, second, third] = summaryLines({
+    sim,
+    target: 100,
+    stop: 99,
+    rr: 2,
+    unit: "원",
+  });
+  assert.match(first, /목표 100원/);
+  assert.match(second, /미도달 포함 −0\.18R/);
+  assert.match(second, /두 값만 확률로 더하면 \+0\.34R/);
+  assert.match(second, /미도달 5\.0%/);
+  assert.match(second, /손실 쪽/);
+  assert.match(third, /이익 마감률 46\.0%/);
+  assert.match(third, /목표 도달 43\.0%/);
+  assert.ok(!third.includes("승률"));
+
+  // 미도달 0%면 두 값만 더한 값이 곧 평균이다
+  const noMiss = avgRBreakdown({ pTarget: 0.5, pStop: 0.5, pNeither: 0, avgR: 0.5, rAtTarget: 2 });
+  assert.equal(noMiss.neitherAvgR, null);
+  const lines = summaryLines({
+    sim: { ...sim, pNeither: 0, pTarget: 0.5, pStop: 0.5, avgR: 0.5 },
+    target: 100,
+    stop: 99,
+    rr: 2,
+    unit: "원",
+  });
+  assert.match(lines[1], /미도달 0%라 그대로 실제 평균/);
+});
+
+test("v2.1.3 오류 문구: 한글은 단어 단위로 끊고 긴 문자열만 넘치지 않게 끊는 CSS 규칙이 있다", () => {
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const rule = /\.alert\s*\{[^}]*word-break:\s*keep-all;[^}]*overflow-wrap:\s*anywhere;[^}]*\}/s;
+  assert.match(css, rule, "오류·경고 문구에 keep-all/anywhere 규칙이 없습니다");
+  // 여러 건 오류의 줄바꿈(pre-line) 규칙도 그대로 남아 있다
+  assert.match(css, /\.alert\.error\s*\{[^}]*white-space:\s*pre-line;/s);
+});
+
+test("v2.1.3 수량 카드 기댓값 각주: 포지션 방향과 실제 평균 R을 함께 적는다", () => {
+  const buy = sizePosition({
+    entry: 100,
+    stop: 99,
+    target: 102,
+    account: 10_000_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: -0.18,
+  });
+  const sell = sizePosition({
+    entry: 100,
+    stop: 101,
+    target: 98,
+    account: 10_000_000,
+    riskPct: 1,
+    side: "sell",
+    expectedR: 0.146,
+  });
+  // 기댓값 계산에 쓴 평균 R을 결과가 그대로 들고 있다(화면 각주·계산이 같은 값)
+  assert.equal(buy.expectedR, -0.18);
+  assert.equal(sell.expectedR, 0.146);
+  assert.equal(
+    expectedValueNote(buy.side, buy.expectedR),
+    "매수 가정 · 평균 −0.18R 단순 곱 · 수수료·세금·갭 미반영"
+  );
+  assert.equal(
+    expectedValueNote(sell.side, sell.expectedR),
+    "매도 가정 · 평균 +0.15R 단순 곱 · 수수료·세금·갭 미반영"
+  );
+  // 기댓값 = 실제 최대 손실 × 평균 R 그대로
+  assert.ok(Math.abs(buy.expectedValue - buy.maxLoss * buy.expectedR) < 1e-9);
 });

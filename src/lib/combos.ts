@@ -1,4 +1,5 @@
 import type { Side } from "./types";
+import type { ComboMode } from "./terms";
 import type { Pool } from "./pool";
 import { simulate } from "./simulate";
 import { roundPrice } from "./format";
@@ -17,7 +18,7 @@ export interface ComboCell {
   pTarget: number;
   pStop: number;
   pNeither: number;
-  /** 이익으로 끝난 비율(목표 도달 + 종가 이익 마감) = 승률 */
+  /** 이익 마감률 = 목표 도달 + 목표 미도달 유리 마감(종가 이익) */
   pGreen: number;
   avgR: number;
 }
@@ -118,4 +119,18 @@ export function compareCombos(input: {
   }
   const ms = (typeof performance !== "undefined" ? performance.now() : Date.now()) - t0;
   return { cells, levels, targetRs, replays, ms };
+}
+
+/**
+ * 조합표 성향 토글의 실제 선택 규칙.
+ * - "green": 이익 마감률(pGreen) 최고 칸
+ * - "avgR": 1회 평균 R(기댓값) 최고 칸 — 토글 이름도 이 기준 그대로 적는다
+ * 같은 값이면 먼저 나온 칸을 쓴다(표 순서 고정).
+ */
+export function pickBestCell(cells: ComboCell[], mode: ComboMode): ComboCell | null {
+  if (!cells.length) return null;
+  const score = (c: ComboCell) => (mode === "green" ? c.pGreen : c.avgR);
+  let best = cells[0];
+  for (const c of cells) if (score(c) > score(best)) best = c;
+  return best;
 }

@@ -442,6 +442,84 @@ input[type="number"] {
   white-space: pre-line;
 }
 
+/* v2.1.3 — 오류·경고 문구는 단어 단위로 끊는다.
+   '형식으/로'처럼 한글 글자 중간에서 끊기지 않게 keep-all을 쓰고,
+   시각·타임스탬프처럼 공백 없는 긴 문자열만 마지막 수단으로 넘치지 않게 anywhere로 끊는다. */
+.alert {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 요약 카드의 보조 설명 (이익 마감률 구성 · 미도달 포함) */
+.stat-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 식·계산 근거 한 줄 (1회 평균 R 분해, 1R 정의) */
+.term-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 9px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* v2.1.3 — 리포트의 줄글도 단어 단위로 끊는다(360px에서 '유리'가 '유/리'로 끊기던 문제).
+   아주 긴 문자열은 anywhere로 마지막 수단에서만 끊는다. */
+.summary-lines li,
+.combo-detail,
+.report .card-desc,
+.report .footnote,
+.term-note,
+.disclaimer {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 지표 카드·수량 표의 짧은 설명도 단어 단위로 끊는다 */
+.survival-stats,
+.summary-stats,
+.sizing-kv,
+.warn-list li,
+.stat-label,
+.stat-caption,
+.stat-sub,
+.kv-sub,
+.muted.small,
+.thermo-badge,
+.combo-best-line {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 조합표 성향 토글 문구도 단어 단위로 끊는다 */
+.seg-btn,
+.combo-mode-hint {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 조합표 성향 토글의 현재 기준 안내 */
+.combo-mode-note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #475569;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 .footnote {
   margin: 10px 0 0;
   font-size: 11.5px;

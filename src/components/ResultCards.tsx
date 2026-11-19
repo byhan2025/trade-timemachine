@@ -113,7 +113,7 @@ export function ResultCards({
       <div className="insight-row">
         <div>
           <span className="insight-label">
-            목표 도달 + 종가 유리 마감 <strong>합계</strong>
+            이익 마감률 <strong>(목표 도달 + 종가 유리 마감)</strong>
           </span>
           <strong>{pctText(sim.pGreen)}</strong>
           <span className="muted small">

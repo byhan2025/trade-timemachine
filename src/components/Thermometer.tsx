@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Thermometer } from "../lib/thermometer";
+import { formatPctValue } from "../lib/format";
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -63,7 +64,7 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           <div className="thermo-track">
             <span className="thermo-fill avg" style={{ width: `${avgW}%` }} />
           </div>
-          <strong className="thermo-row-value">{thermo.avgRangePct.toFixed(2)}%</strong>
+          <strong className="thermo-row-value">{formatPctValue(thermo.avgRangePct, 2)}</strong>
         </div>
         {hasRemain && (
           <div className="thermo-row">
@@ -73,7 +74,7 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
             <div className="thermo-track">
               <span className="thermo-fill remain" style={{ width: `${remainW}%` }} />
             </div>
-            <strong className="thermo-row-value">{thermo.remainMedianPct.toFixed(2)}%</strong>
+            <strong className="thermo-row-value">{formatPctValue(thermo.remainMedianPct, 2)}</strong>
           </div>
         )}
         <div className="thermo-row">
@@ -81,7 +82,7 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           <div className="thermo-track">
             <span className="thermo-fill stop" style={{ width: `${stopW}%` }} />
           </div>
-          <strong className="thermo-row-value">{stopLine.toFixed(2)}%</strong>
+          <strong className="thermo-row-value">{formatPctValue(stopLine, 2)}</strong>
         </div>
         <p className="thermo-ratio">
           <span className={`thermo-badge ${thermo.band}`}>손절 ÷ 평균 고저폭 = {thermo.ratio.toFixed(2)}배</span>
@@ -103,9 +104,10 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           height={H}
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`최근 ${thermo.sessions}세션 일중 고저폭 막대. 평균 일중 고저폭 ${thermo.avgRangePct.toFixed(
+          aria-label={`최근 ${thermo.sessions}세션 일중 고저폭 막대. 평균 일중 고저폭 ${formatPctValue(
+            thermo.avgRangePct,
             2
-          )}%, 내 손절 ${stopLine.toFixed(2)}%.`}
+          )}, 내 손절 ${formatPctValue(stopLine, 2)}.`}
         >
           <title>세션별 일중 고저폭과 내 손절폭</title>
           <rect x={0} y={0} width={W} height={H} fill="#ffffff" />
@@ -174,7 +176,7 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
           </li>
           <li>
             <span className="swatch" style={{ background: "#dc2626" }} /> 내 손절{" "}
-            {stopLine.toFixed(2)}%
+            {formatPctValue(stopLine, 2)}
           </li>
         </ul>
       </div>
@@ -182,16 +184,17 @@ export function ThermometerView({ thermo }: { thermo: Thermometer }) {
       <p className="thermo-headline">{thermo.headline}</p>
       <p className="thermo-verdict">{thermo.verdict}</p>
       <ul className="thermo-facts" data-testid="thermo-facts">
-        <li>중앙 세션 일중 고저폭 {thermo.medianRangePct.toFixed(2)}%</li>
+        <li>중앙 세션 일중 고저폭 {formatPctValue(thermo.medianRangePct, 2)}</li>
         <li>
-          가장 좁은 날 {thermo.minRangePct.toFixed(2)}% · 가장 넓은 날{" "}
-          {thermo.maxRangePct.toFixed(2)}%
+          가장 좁은 날 {formatPctValue(thermo.minRangePct, 2)} · 가장 넓은 날{" "}
+          {formatPctValue(thermo.maxRangePct, 2)}
         </li>
-        <li>분봉 한 개 평균 고저폭 {thermo.avgBarRangePct.toFixed(2)}%</li>
+        <li>분봉 한 개 평균 고저폭 {formatPctValue(thermo.avgBarRangePct, 2)}</li>
         {hasRemain && (
           <li data-testid="thermo-remain-fact">
-            진입 후 남은 {thermo.remainBars}봉 고저폭 중앙 {thermo.remainMedianPct.toFixed(2)}% (내
-            손절의 {multipleText(thermo.remainMultipleStop)}배)
+            진입 후 남은 {thermo.remainBars}봉 고저폭 중앙{" "}
+            {formatPctValue(thermo.remainMedianPct, 2)} (내 손절의{" "}
+            {multipleText(thermo.remainMultipleStop)}배)
           </li>
         )}
       </ul>

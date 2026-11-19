@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SurvivalResult } from "../lib/survival";
-import { moneyLabel } from "../lib/format";
+import { formatPctValue, moneyLabel } from "../lib/format";
 
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -23,11 +23,21 @@ export function SurvivalChart({
   unit,
   account,
   riskPct,
+  planRiskPct,
+  cashLimited,
+  oneR,
 }: {
   survival: SurvivalResult;
   unit: string;
   account: number;
+  /** 실제 계산에 쓴 1회 위험률(%) — 수량 카드의 유효 위험률 */
   riskPct: number;
+  /** 사용자가 입력한 계획 허용 손실률(%) */
+  planRiskPct: number;
+  /** 계좌 현금 한도 때문에 수량이 줄어 실제 위험률이 계획보다 작아졌는지 */
+  cashLimited: boolean;
+  /** 시작 자금 기준 1R 금액(원) */
+  oneR: number;
 }) {
   const { ref, width } = useWidth<HTMLDivElement>();
   const compact = width < 520;
@@ -64,6 +74,8 @@ export function SurvivalChart({
 
   const yTicks = [lo + (hi - lo) * 0.12, (lo + hi) / 2, hi - (hi - lo) * 0.12];
   const xTicks = [0, 5, 10, 15, survival.trades].filter((v) => v <= survival.trades);
+  /** 정수 주 내림 때문에 계획보다 아주 조금 작아진 경우(현금 한도와 구분해 적는다) */
+  const roundingOnly = !cashLimited && Math.abs(riskPct - planRiskPct) > 1e-9;
 
   return (
     <div ref={ref} className="chart-wrap survival" data-testid="survival-chart">
@@ -160,13 +172,38 @@ export function SurvivalChart({
             중앙 {survival.maxStreakMedian}회 · 최악 {survival.maxStreakMax}회
           </span>
         </div>
+        <div data-testid="survival-one-r">
+          <span className="stat-label">1R 금액 (실제 최대 손실)</span>
+          <strong>{moneyLabel(oneR, unit)}</strong>
+          <span className="muted small">
+            계좌의 {formatPctValue(riskPct, 2)}
+            {cashLimited
+              ? ` · 계좌 현금 한도로 계획 ${formatPctValue(planRiskPct, 2)}보다 작아짐`
+              : roundingOnly
+                ? ` · 계획 ${formatPctValue(planRiskPct, 2)}에서 정수 주 내림`
+                : ""}
+          </span>
+        </div>
       </div>
-      <p className="footnote">
-        계좌 {moneyLabel(account, unit)}에서 매매마다 현재 자금의 {riskPct}%(1R)만큼 위험을 걸고(복리){" "}
-        {survival.trades}회를 반복한 {survival.scenarios.toLocaleString("ko-KR")}개 시나리오입니다. 10번째·90번째
-        백분위는 그 시나리오들의 20회 후 자금을 낮은 순으로 세웠을 때 아래에서 10%, 위에서 10% 지점(서로 대칭인
-        하위 10%·상위 10% 흐름)입니다. 20회 후 시작 자금보다 적을 확률{" "}
-        {(survival.belowStartProb * 100).toFixed(0)}%. 미래 수익 예측이 아니라 분포 가정에 따른 참고치입니다.
+      <p className="footnote" data-testid="survival-footnote">
+        계좌 {moneyLabel(account, unit)}에서 매매마다 현재 자금의 {formatPctValue(riskPct, 2)}(1R ={" "}
+        {moneyLabel(oneR, unit)})만큼 위험을 걸고(복리) {survival.trades}회를 반복한{" "}
+        {survival.scenarios.toLocaleString("ko-KR")}개 시나리오입니다.
+        {cashLimited && (
+          <>
+            {" "}
+            <strong>
+              수량 카드에서 계좌 현금 한도가 먼저 걸려 실제 1회 최대 손실이 계획한 허용 손실(
+              {formatPctValue(planRiskPct, 2)} = {moneyLabel((account * planRiskPct) / 100, unit)})보다
+              작습니다. 그래서 이 그래프도 맹목적으로 계획 위험률을 쓰지 않고, 수량 카드의 실제
+              위험률({formatPctValue(riskPct, 2)})로 계산했습니다.
+            </strong>
+          </>
+        )}{" "}
+        10번째·90번째 백분위는 그 시나리오들의 20회 후 자금을 낮은 순으로 세웠을 때 아래에서 10%,
+        위에서 10% 지점(서로 대칭인 하위 10%·상위 10% 흐름)입니다. 20회 후 시작 자금보다 적을 확률{" "}
+        {(survival.belowStartProb * 100).toFixed(0)}%. 미래 수익 예측이 아니라 분포 가정에 따른
+        참고치입니다.
       </p>
     </div>
   );

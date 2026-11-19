@@ -5,10 +5,19 @@ import { buildThermometer } from "../lib/thermometer";
 import { buildStopLevels, compareCombos } from "../lib/combos";
 import type { ComboResult } from "../lib/combos";
 import { simulateSurvival } from "../lib/survival";
+import { summaryLines, avgRBreakdown } from "../lib/summary";
 import { formatPct, formatPrice, formatR, moneyLabel } from "../lib/format";
+import {
+  GREEN_BREAKDOWN,
+  GREEN_LABEL,
+  RISK_FORMULA_ABS,
+  greenGloss,
+  rGloss,
+  type ComboMode,
+} from "../lib/terms";
+import { EXTREME_STOP_RATIO } from "../lib/sizing";
 import { ThermometerView } from "./Thermometer";
 import { ComboTable } from "./ComboTable";
-import type { ComboMode } from "./ComboTable";
 import { SurvivalChart } from "./SurvivalChart";
 
 interface Props {
@@ -17,28 +26,9 @@ interface Props {
   onBack: () => void;
 }
 
-/** 초보자가 5초에 읽는 3줄 요약 */
-function summaryLines(run: RunResult, unit: string): string[] {
-  const { sim, plan } = run;
-  const first = `${sim.replays.toLocaleString("ko-KR")}번 중 ${formatPct(
-    sim.pTarget
-  )}는 목표 ${formatPrice(plan.target, unit)}에 먼저 닿았고, ${formatPct(
-    sim.pStop
-  )}는 손절 ${formatPrice(plan.stop, unit)}에 먼저 닿았습니다.`;
-  const mood = Math.abs(sim.avgR) < 0.02 ? "거의 본전" : sim.avgR > 0 ? "이익 쪽" : "손실 쪽";
-  const second = `목표 도달은 +${sim.rAtTarget.toFixed(2)}R, 손절은 −1R이라 1회 평균은 ${formatR(
-    sim.avgR
-  )}로 통계상 ${mood}입니다.`;
-  const third = `이익으로 끝난 비율(승률) ${formatPct(
-    sim.pGreen
-  )}, 손익비 1:${(run.size.rr || 0).toFixed(2)} 구조입니다. 남은 ${sim.barsLeft}봉을 과거 봉 분포로 ${sim.replays.toLocaleString(
-    "ko-KR"
-  )}번 되감은 결과입니다.`;
-  return [first, second, third];
-}
-
 export function ReportView({ run, stale, onBack }: Props) {
   const unit = run.dataset.priceUnit;
+  /** 방향과 무관한 손절폭 크기 (1R = |진입가 − 손절가|) */
   const stopPct = Math.abs(run.plan.entry - run.plan.stop) / run.plan.entry;
 
   const thermo = useMemo(
@@ -51,7 +41,7 @@ export function ReportView({ run, stale, onBack }: Props) {
     [run.plan.entry, run.plan.side, stopPct, unit]
   );
 
-  const [mode, setMode] = useState<ComboMode>("winrate");
+  const [mode, setMode] = useState<ComboMode>("green");
   const [combos, setCombos] = useState<ComboResult | null>(null);
   const [combosBusy, setCombosBusy] = useState(true);
 
@@ -85,22 +75,35 @@ export function ReportView({ run, stale, onBack }: Props) {
     return () => window.clearTimeout(id);
   }, [run.signature, run.dataset, run.plan.entry, run.plan.side, run.plan.entryBar, levels]);
 
+  /** 수량 카드의 실제 유효 위험률 — 현금 상한으로 수량이 줄면 계획 1%가 아니라 실제 1R을 쓴다 */
+  const effectiveRiskPct =
+    run.size.shares > 0 ? run.size.effectiveRiskPct : run.plan.riskPct;
+
   const survival = useMemo(() => {
     const samples = run.sim.rSamples;
     if (!samples || !samples.length) return null;
     return simulateSurvival({
       rSamples: samples,
       trades: 20,
-      riskPct: run.plan.riskPct,
+      riskPct: effectiveRiskPct,
       startEquity: run.plan.account,
       scenarios: 4000,
       seed: 19,
     });
-  }, [run.sim, run.plan.riskPct, run.plan.account]);
+  }, [run.sim, effectiveRiskPct, run.plan.account]);
 
-  const lines = summaryLines(run, unit);
+  const lines = summaryLines({
+    sim: run.sim,
+    target: run.plan.target,
+    stop: run.plan.stop,
+    rr: run.size.rr,
+    unit,
+  });
+  const breakdown = avgRBreakdown(run.sim);
   /** 계산된(또는 계산될) 고유 조합 수 — 손절가 호가 단위 중복 제거로 9보다 작을 수 있다 */
   const comboCount = combos ? combos.cells.length : levels.length * 3;
+  /** 손절폭이 진입가의 0.01% 미만이면 가격·퍼센트가 반올림으로 뭉개지지 않게 따로 알린다 */
+  const extremeStop = stopPct > 0 && stopPct < EXTREME_STOP_RATIO;
 
   return (
     <div className="report" data-testid="report">
@@ -111,9 +114,9 @@ export function ReportView({ run, stale, onBack }: Props) {
             {run.dataset.name} · {run.plan.side === "buy" ? "매수" : "매도"} ·{" "}
             {run.dataset.times[run.plan.entryBar]} 진입
           </h2>
-          <p className="muted small">
-            진입 {formatPrice(run.plan.entry, unit)} · 손절 {formatPrice(run.plan.stop, unit)} ·
-            목표 {formatPrice(run.plan.target, unit)} · {run.dataset.meta.sessionsUsed}세션{" "}
+          <p className="muted small" data-testid="report-prices">
+            진입 {formatPrice(run.plan.entry, unit)} · 손절 {formatPrice(run.plan.stop, unit)} · 목표{" "}
+            {formatPrice(run.plan.target, unit)} · {run.dataset.meta.sessionsUsed}세션{" "}
             {run.dataset.meta.interval} · 기준일 {run.dataset.meta.lastDate}
           </p>
         </div>
@@ -121,6 +124,15 @@ export function ReportView({ run, stale, onBack }: Props) {
           ← 시뮬레이터로
         </button>
       </div>
+
+      {extremeStop && (
+        <p className="alert warn small" role="status" data-testid="extreme-stop-note">
+          손절폭이 진입가의 0.01% 미만입니다 — 진입 {formatPrice(run.plan.entry, unit)} / 손절{" "}
+          {formatPrice(run.plan.stop, unit)} = {formatPct(stopPct, 2)} (1주당 위험폭{" "}
+          {formatPrice(Math.abs(run.plan.entry - run.plan.stop), unit)}). 호가 단위·체결 오차만으로도
+          손절이 즉시 걸릴 수 있어, 아래 확률·수량·생존 그래프는 참고용으로만 보세요.
+        </p>
+      )}
 
       {stale && (
         <p className="alert warn small" role="status">
@@ -154,14 +166,24 @@ export function ReportView({ run, stale, onBack }: Props) {
             <strong className="neg">{formatPct(run.sim.pStop)}</strong>
           </div>
           <div>
-            <span className="stat-label">이익 마감(승률)</span>
+            <span className="stat-label">{GREEN_LABEL}</span>
             <strong>{formatPct(run.sim.pGreen)}</strong>
+            <span className="stat-sub">{GREEN_BREAKDOWN}</span>
           </div>
           <div>
             <span className="stat-label">1회 평균</span>
             <strong className={run.sim.avgR >= 0 ? "pos" : "neg"}>{formatR(run.sim.avgR)}</strong>
+            <span className="stat-sub">미도달 포함</span>
           </div>
         </div>
+        <p className="term-note" data-testid="avg-r-breakdown">
+          1회 평균 {formatR(run.sim.avgR)} = 목표 {formatR(run.sim.rAtTarget)}×
+          {formatPct(run.sim.pTarget)} + 손절 −1R×{formatPct(run.sim.pStop)} ={" "}
+          {formatR(breakdown.twoValueR)}
+          {breakdown.neitherAvgR === null
+            ? " (미도달 0%라 그대로 같습니다)."
+            : ` + 미도달 ${formatPct(run.sim.pNeither)}×${formatR(breakdown.neitherAvgR)} (장 마감 종가 R).`}
+        </p>
         <p className="footnote">
           1만 회 빈도는 미래 확률이 아니라 과거 봉 재표본 모형 결과입니다. 같은 봉 내 손절·목표 동시
           도달 시 손절 우선 처리, 종료가 분포는 이후 장 마감까지 재생한 값입니다.
@@ -187,9 +209,7 @@ export function ReportView({ run, stale, onBack }: Props) {
           <h3 className="card-title" id="rep-combos">
             3. 🎯 {comboCount}가지 손절·목표 조합
           </h3>
-          <span className="badge">
-            손절 {levels.length} × 목표 3
-          </span>
+          <span className="badge">손절 {levels.length} × 목표 3</span>
         </div>
         <p className="card-desc">
           내 진입가 {formatPrice(run.plan.entry, unit)} 기준으로 손절폭을 내 계획의 0.6배·1배·1.5배로
@@ -210,7 +230,8 @@ export function ReportView({ run, stale, onBack }: Props) {
         />
         {!combosBusy && !combos && (
           <p className="alert warn small">
-            완전한 세션이 3일 미만이라 손절·목표 조합을 계산할 수 없습니다. 더 긴 데이터로 다시 실행해 주세요.
+            완전한 세션이 3일 미만이라 손절·목표 조합을 계산할 수 없습니다. 더 긴 데이터로 다시 실행해
+            주세요.
           </p>
         )}
       </section>
@@ -224,14 +245,20 @@ export function ReportView({ run, stale, onBack }: Props) {
         </div>
         <p className="card-desc">
           방금 나온 1회 결과 분포(목표·손절·마감 확률과 R값)를 20번 연속 적용했을 때 계좌 자금이
-          어디로 가는지 봅니다. 100 = 시작 자금({moneyLabel(run.plan.account, unit)}).
+          어디로 가는지 봅니다. 100 = 시작 자금({moneyLabel(run.plan.account, unit)}).{" "}
+          {run.size.riskLimitedByCash
+            ? "1R은 계획한 허용 손실률이 아니라 수량 카드의 실제 최대 손실 기준입니다."
+            : "1R은 수량 카드의 실제 최대 손실 기준입니다."}
         </p>
         {survival ? (
           <SurvivalChart
             survival={survival}
             unit={unit}
             account={run.plan.account}
-            riskPct={run.plan.riskPct}
+            riskPct={effectiveRiskPct}
+            planRiskPct={run.plan.riskPct}
+            cashLimited={run.size.riskLimitedByCash}
+            oneR={run.size.maxLoss}
           />
         ) : (
           <p className="alert warn small">
@@ -247,17 +274,18 @@ export function ReportView({ run, stale, onBack }: Props) {
         <div className="glossary">
           <details>
             <summary>R배수 — 손절폭을 1로 놓고 잰 수익·손실</summary>
-            <p>
-              내가 정한 손절폭(진입가−손절가)을 <strong>1R</strong>이라고 부릅니다. 목표까지 2배
-              떨어져 있으면 +2R, 손절되면 −1R입니다. 금액이 아니라 <strong>손절 대비 몇 배</strong>로
-              세는 단위라 종목이 달라도 비교할 수 있습니다.
+            <p data-testid="r-gloss">{rGloss(run.plan.side)}</p>
+            <p className="term-note">
+              1R = <strong>{RISK_FORMULA_ABS}</strong> = 이번 가정에서는{" "}
+              <strong>|{formatPrice(run.plan.entry, unit)} − {formatPrice(run.plan.stop, unit)}|</strong>{" "}
+              = {formatPrice(run.size.riskPerShare, unit)}
             </p>
           </details>
           <details>
             <summary>손익비 — 1번 이길 때 버는 것과 1번 질 때 잃는 것의 비율</summary>
             <p>
-              1:2면 한 번 이길 때 2R을 벌고, 한 번 질 때 1R을 잃습니다. 승률이 40%여도 손익비가
-              좋으면 남을 수 있고, 승률이 70%여도 손익비가 나쁘면 잃을 수 있습니다.
+              1:2면 목표에 닿을 때 2R을 벌고, 손절되면 1R을 잃습니다. 이익 마감률이 40%여도 손익비가
+              좋으면 남을 수 있고, 이익 마감률이 70%여도 손익비가 나쁘면 잃을 수 있습니다.
             </p>
           </details>
           <details>
@@ -271,16 +299,16 @@ export function ReportView({ run, stale, onBack }: Props) {
           <details>
             <summary>기댓값 — 같은 계획을 여러 번 했을 때 1회당 평균</summary>
             <p>
-              확률 × 이익을 모두 더한 1회 평균입니다. 예: 45%로 +2R, 55%로 −1R이면 기댓값은
-              0.45×2 − 0.55×1 = <strong>+0.35R</strong>. 과거 분포 가정일 뿐 미래 보장이 아닙니다.
+              확률 × 이익을 모두 더한 1회 평균입니다. 예: 45%로 +2R, 55%로 −1R이면 기댓값은 0.45×2 −
+              0.55×1 = <strong>+0.35R</strong>. 과거 분포 가정일 뿐 미래 보장이 아닙니다. 이 리포트의
+              1회 평균은 목표·손절뿐 아니라 미도달(장 마감) 건의 종가 R까지 더한 값입니다.
             </p>
           </details>
           <details>
-            <summary>승률 — 이익으로 끝난 비율</summary>
-            <p>
-              목표 도달 + 목표 전에 장이 끝났지만 종가가 유리한 경우를 합친 비율입니다. 손절이나
-              불리한 종가는 세지 않습니다.
-            </p>
+            <summary>
+              이익 마감률 — 목표 도달 + 목표 미도달 유리 마감(목표 도달률과 다름)
+            </summary>
+            <p data-testid="green-gloss">{greenGloss()}</p>
           </details>
         </div>
       </section>

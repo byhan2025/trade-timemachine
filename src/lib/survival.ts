@@ -33,6 +33,10 @@ export interface SurvivalResult {
   maxStreakMax: number;
   /** 쓰인 1회 기대 R(표본 평균) */
   meanR: number;
+  /** 계산에 쓴 1회 위험률(%) — 수량 카드의 유효 위험률과 같은 값 */
+  riskPct: number;
+  /** 시작 자금 기준 1R 금액 (startEquity × riskPct/100) */
+  oneR: number;
 }
 
 function quantile(sorted: Float64Array, q: number): number {
@@ -69,6 +73,8 @@ export function simulateSurvival(input: SurvivalInput): SurvivalResult {
       maxStreakP95: 0,
       maxStreakMax: 0,
       meanR: 0,
+      riskPct: input.riskPct,
+      oneR: 0,
     };
   }
 
@@ -128,5 +134,7 @@ export function simulateSurvival(input: SurvivalInput): SurvivalResult {
     maxStreakP95: quantile(sortedStreak, 0.95),
     maxStreakMax: sortedStreak.length ? sortedStreak[sortedStreak.length - 1] : 0,
     meanR: sumR / n,
+    riskPct: input.riskPct,
+    oneR: input.startEquity * risk,
   };
 }

@@ -1,5 +1,12 @@
 import type { SizeResult } from "../lib/sizing";
-import { formatMoneySigned, formatNumber, formatPrice, moneyLabel } from "../lib/format";
+import {
+  formatMoneySigned,
+  formatNumber,
+  formatPctValue,
+  formatPrice,
+  moneyLabel,
+} from "../lib/format";
+import { expectedValueNote } from "../lib/terms";
 
 interface Props {
   size: SizeResult;
@@ -14,7 +21,8 @@ export function SizingCard({ size, unit, account, riskPct }: Props) {
       <h3 className="card-title">손실 한도 기준 수량 &amp; 리스크 요약</h3>
       <dl className="kv sizing-kv">
         <div>
-          <dt>1주당 위험폭 (진입−손절)</dt>
+          {/* 매도는 손절가가 진입가보다 위라서 '진입−손절'로 적으면 부호가 뒤집힌다 */}
+          <dt>1주당 위험폭 ({size.riskFormula})</dt>
           <dd>{formatPrice(size.riskPerShare, unit)}</dd>
         </div>
         <div>
@@ -43,9 +51,24 @@ export function SizingCard({ size, unit, account, riskPct }: Props) {
             <span className="muted small">
               {" "}
               (허용 {moneyLabel(size.lossBudget, unit)}의{" "}
-              {size.lossBudget > 0 ? ((size.maxLoss / size.lossBudget) * 100).toFixed(0) : "0"}%)
+              {size.lossBudget > 0
+                ? formatPctValue((size.maxLoss / size.lossBudget) * 100, 0)
+                : "0%"}
+              )
             </span>
             <span className="kv-sub">갭·미체결·슬리피지·수수료는 반영되지 않은 참고치입니다</span>
+          </dd>
+        </div>
+        <div data-testid="effective-risk-row">
+          <dt>실제 1회 위험률 (이 손실액 ÷ 계좌)</dt>
+          <dd>
+            {formatPctValue(size.effectiveRiskPct, 2)}
+            <span className="kv-sub">
+              계획한 허용 손실 {formatPctValue(riskPct, 2)} 기준 수량으로는{" "}
+              {moneyLabel(size.lossBudget, unit)}이지만, 실제 수량 {formatNumber(size.shares, 0)}주 ×
+              위험폭 {formatPrice(size.riskPerShare, unit)} = {moneyLabel(size.maxLoss, unit)}입니다.
+              아래 생존 시뮬레이션도 이 실제 위험률로 계산합니다.
+            </span>
           </dd>
         </div>
         <div>
@@ -56,7 +79,9 @@ export function SizingCard({ size, unit, account, riskPct }: Props) {
           <dt>기댓값 (참고치)</dt>
           <dd className="kv-neutral" data-testid="expected-value">
             {formatMoneySigned(size.expectedValue, unit)}
-            <span className="kv-sub">과거 평균 R 단순 곱 · 수수료·세금·갭 미반영</span>
+            <span className="kv-sub" data-testid="expected-value-note">
+              {expectedValueNote(size.side, size.expectedR)}
+            </span>
           </dd>
         </div>
         <div data-testid="position-value-row">
@@ -72,9 +97,19 @@ export function SizingCard({ size, unit, account, riskPct }: Props) {
         </div>
       </dl>
       <p className="footnote">
-        계좌 {moneyLabel(account, unit)} × 1회 허용 손실 {riskPct}% = {moneyLabel(size.lossBudget, unit)}을
-        넘지 않도록 정수 주로 내림한 <strong>계산 예시</strong>입니다. 실제 체결 가격·수수료·세금에 따라
-        달라지며, 기댓값은 과거 봉 분포의 평균 R일 뿐 미래 수익이 아닙니다.
+        계좌 {moneyLabel(account, unit)} × 1회 허용 손실 {formatPctValue(riskPct, 2)} ={" "}
+        {moneyLabel(size.lossBudget, unit)}을 넘지 않도록 정수 주로 내림한{" "}
+        <strong>계산 예시</strong>입니다.
+        {size.riskLimitedByCash && (
+          <>
+            {" "}
+            다만 계좌 현금 한도가 먼저 걸려 실제 1회 최대 손실은{" "}
+            <strong>{moneyLabel(size.maxLoss, unit)}</strong>(계좌의{" "}
+            {formatPctValue(size.effectiveRiskPct, 2)})입니다.
+          </>
+        )}{" "}
+        실제 체결 가격·수수료·세금에 따라 달라지며, 기댓값은 과거 봉 분포의 평균 R일 뿐 미래 수익이
+        아닙니다.
         {size.side === "sell" &&
           " 매도 가정은 공매도 증거금·대주 가능 여부·수수료/이자를 반영하지 않은 현금 한도 기준 참고 수량입니다."}
       </p>
