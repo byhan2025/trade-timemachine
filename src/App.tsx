@@ -5,13 +5,13 @@ import { simulate } from "./lib/simulate";
 import { historyReplay } from "./lib/backtest";
 import { sizePosition } from "./lib/sizing";
 import { parseCustom } from "./lib/parseCustom";
-import { formatPrice, formatPct, formatR, mirrorPrice, offsetPrice, roundPrice } from "./lib/format";
+import { formatPrice, formatR, mirrorPrice, offsetPrice, roundPrice } from "./lib/format";
 import { fetchStockBars, RELAY_OFFLINE_MESSAGE, StockApiError } from "./lib/stockApi";
 import type { RunResult } from "./lib/run";
 import { FanChart } from "./components/FanChart";
 import { ResultCards } from "./components/ResultCards";
 import { SizingCard, isExtremeStop } from "./components/SizingCard";
-import { EXTREME_BANNER_NOTE, avgRTone, positiveTone } from "./lib/easy";
+import { EXTREME_BANNER_NOTE, ZERO_SHARES_BANNER_NOTE, avgRTone, pctThree, positiveTone } from "./lib/easy";
 import { BacktestCard } from "./components/BacktestCard";
 import { DataNote } from "./components/DataNote";
 import { StockSearch } from "./components/StockSearch";
@@ -362,6 +362,11 @@ export default function App() {
     : "";
   const stale = !!run && run.signature !== currentSignature;
 
+  /** 5초 요약 배너·결과 카드·리포트가 같은 0.1% 표기를 쓰도록 한 곳에서 만든다 */
+  const bannerPct = run
+    ? pctThree(run.sim.pTarget, run.sim.pStop, run.sim.pNeither)
+    : { target: "", stop: "", neither: "" };
+
   const runDisabled = running || !dataset || customPending;
 
   return (
@@ -376,7 +381,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.2.3 · 극단 입력 전체 중립·0주 원인 분기</span>
+        <span className="pill">v2.2.4 · 0주 경고 분리·조합표 실제 배수·요약 모순 정리</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -751,16 +756,17 @@ export default function App() {
                   <div className="easy-banner-body">
                     <span className="badge strong">5초 요약</span>
                     <p>
-                      {/* 극단 입력은 목표 도달 확률도 초록 강조 없이 중립 (v2.2.3) */}
+                      {/* v2.2.4 — 결과 카드와 같은 0.1% 표기 + 미도달을 함께 적어 세 값이 100%가 되게 한다 */}
                       1만 번 중{" "}
                       <strong
                         className={positiveTone(isExtremeStop(run.plan.entry, run.plan.stop))}
                         data-testid="banner-p-target"
                       >
-                        {formatPct(run.sim.pTarget)}
+                        {bannerPct.target}
                       </strong>{" "}
-                      목표 도달 · <strong className="neg">{formatPct(run.sim.pStop)}</strong> 손절 · 1회
-                      평균{" "}
+                      목표 도달 · <strong className="neg" data-testid="banner-p-stop">{bannerPct.stop}</strong>{" "}
+                      손절 · <strong data-testid="banner-p-neither">{bannerPct.neither}</strong> 장 끝까지
+                      미도달 · 1회 평균{" "}
                       {/* 극단 입력은 평균 R을 초록으로 강조하지 않고 중립 회색으로 (v2.2.2) */}
                       <strong
                         className={avgRTone(run.sim.avgR, isExtremeStop(run.plan.entry, run.plan.stop))}
@@ -772,6 +778,11 @@ export default function App() {
                     {isExtremeStop(run.plan.entry, run.plan.stop) && (
                       <p className="muted small" data-testid="banner-extreme-note">
                         {EXTREME_BANNER_NOTE}
+                      </p>
+                    )}
+                    {run.size.shares === 0 && (
+                      <p className="muted small" data-testid="banner-zero-share-note">
+                        {ZERO_SHARES_BANNER_NOTE}
                       </p>
                     )}
                     <p className="muted small">
@@ -863,7 +874,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.2.3 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.2.4 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>

@@ -6,7 +6,7 @@ import { buildStopLevels, compareCombos } from "../lib/combos";
 import type { ComboResult } from "../lib/combos";
 import { simulateSurvival } from "../lib/survival";
 import { formatPct, formatPrice, formatR } from "../lib/format";
-import { COMBO_MULTIPLE_NOTE, GREEN_BREAKDOWN, GREEN_LABEL, easyGlossary } from "../lib/terms";
+import { COMBO_MULTIPLE_NOTE, GREEN_LABEL, easyGlossary } from "../lib/terms";
 import type { ComboMode } from "../lib/terms";
 import { EXTREME_STOP_RATIO } from "../lib/sizing";
 import {
@@ -15,8 +15,11 @@ import {
   avgRTone,
   easyMathDetail,
   easyMoneyChip,
+  easyStopLevelLabel,
   easySummary,
   easyThermometerLine,
+  greenRatePct,
+  pctThree,
   positiveTone,
 } from "../lib/easy";
 import { ThermometerView } from "./Thermometer";
@@ -96,8 +99,12 @@ export function ReportView({ run, stale, onBack }: Props) {
     });
   }, [run.sim, effectiveRiskPct, run.plan.account]);
 
-  /** 계산된(또는 계산될) 고유 조합 수 — 손절가 호가 단위 중복 제거로 9보다 작을 수 있다 */
-  const comboCount = combos ? combos.cells.length : levels.length * 3;
+  /** 계산된(또는 계산될) 고유 조합 수 — 손절가·목표가 호가 단위 중복 제거로 9보다 작을 수 있다 */
+  const comboCount = combos ? combos.cells.filter((c) => c.duplicateOfR === undefined).length : levels.length * 3;
+  /** 표에 실제로 쓰인 목표 배수 — 결과가 오기 전에는 요청값을 그대로 보여 준다 */
+  const targetRs = combos?.targetRs ?? [1, 1.5, 2];
+  /** 행 이름과 같은 말로 손절 단계를 적는다('내 계획의 0.6배·그대로·1.5배') */
+  const levelWords = levels.map((l) => easyStopLevelLabel(l.stopPct, stopPct));
   /** 손절폭이 진입가의 0.01% 미만이면 가격·퍼센트가 반올림으로 뭉개지지 않게 따로 알린다 */
   const extremeStop = stopPct > 0 && stopPct < EXTREME_STOP_RATIO;
   /** 극단 입력이면 목표·이익 쪽 숫자의 초록 강조를 끈다 (v2.2.3) */
@@ -122,6 +129,9 @@ export function ReportView({ run, stale, onBack }: Props) {
     extreme: extremeStop,
   });
   const detail = easyMathDetail({ sim: run.sim, oneR: run.size.maxLoss, unit });
+  /** 접이식 통계도 배너·카드와 같은 0.1% 표기(합이 100.0%가 되는 문자열)를 쓴다 */
+  const statPct = pctThree(run.sim.pTarget, run.sim.pStop, run.sim.pNeither);
+  const greenPct = greenRatePct(run.sim.pTarget, run.sim.pGreen);
   const glossary = easyGlossary(run.plan.side);
   const sharesWord = run.plan.side === "buy" ? "사야" : "팔아야";
 
@@ -179,6 +189,11 @@ export function ReportView({ run, stale, onBack }: Props) {
             <li key={i}>{l}</li>
           ))}
         </ol>
+        {easy.note && (
+          <p className="alert warn small verdict-zero-note" role="status" data-testid="zero-share-note">
+            {easy.note}
+          </p>
+        )}
         {extremeStop && (
           <p className="alert warn small verdict-caution" role="status" data-testid="extreme-caution">
             {EXTREME_STOP_REASON}. 그래서 위 신호등은 유리/손실 판정 대신 '⚪ 참고하기
@@ -197,17 +212,21 @@ export function ReportView({ run, stale, onBack }: Props) {
             <div>
               <span className="stat-label">목표 도달</span>
               <strong className={positive} data-testid="report-p-target">
-                {formatPct(run.sim.pTarget)}
+                {statPct.target}
               </strong>
             </div>
             <div>
               <span className="stat-label">손절 도달</span>
-              <strong className="neg">{formatPct(run.sim.pStop)}</strong>
+              <strong className="neg" data-testid="report-p-stop">
+                {statPct.stop}
+              </strong>
             </div>
             <div>
               <span className="stat-label">{GREEN_LABEL}</span>
-              <strong>{formatPct(run.sim.pGreen)}</strong>
-              <span className="stat-sub">{GREEN_BREAKDOWN}</span>
+              <strong data-testid="report-p-green">{greenPct.total}</strong>
+              <span className="stat-sub">
+                목표 도달 {greenPct.target} + 유리 마감 {greenPct.extra}
+              </span>
             </div>
             <div>
               <span className="stat-label">1회 평균</span>
@@ -243,21 +262,22 @@ export function ReportView({ run, stale, onBack }: Props) {
             2. 손절·목표 넓이를 바꾸면 결과가 어떻게 달라질까요?
           </h3>
           <span className="badge">
-            손절 {levels.length} × 목표 3
+            손절 {levels.length} × 목표 {targetRs.length}
           </span>
         </div>
         <p className="card-desc">
-          내 진입가 {formatPrice(run.plan.entry, unit)}을 그대로 두고, 손절폭을 내 계획의 0.6배·1배·1.5배로
-          넓히거나 좁히고 목표를 손절의 1배·1.5배·2배로 두었을 때예요. 칸마다 “100번 중 몇 번 이익으로
-          끝났는지”와 “1번에 평균 몇 배 남았는지”를 적었어요.
+          내 진입가 {formatPrice(run.plan.entry, unit)}을 그대로 두고, 손절폭을 {levelWords.join("·")}로
+          바꾸고 목표를 손절폭의 {targetRs.map((r) => `${r}배`).join("·")} 지점에 두었을 때예요. 칸마다 “100번 중
+          몇 번 이익으로 끝났는지”와 “1번에 평균 몇 배 남았는지”를 적었어요.
         </p>
         <p className="term-note" data-testid="combo-multiple-note">
           {COMBO_MULTIPLE_NOTE}
         </p>
-        {levels.length < 3 && (
+        {(levels.length < 3 || (combos?.duplicateCount ?? 0) > 0) && (
           <p className="alert warn small" data-testid="combo-dedup-note">
-            손절폭이 너무 좁아 호가 단위에서 0.6배·1배·1.5배가 같은 가격이 되었습니다. 같은 손절가는 한
-            번만 계산해 손절 {levels.length}단계 × 목표 3 = {comboCount}개 조합으로 비교합니다.
+            손절폭이 좁아 호가 단위에서 같은 가격이 생겼습니다. 같은 손절가·목표가는 한 번만 계산해
+            실제로는 <strong>{comboCount}개 조합</strong>(손절 {levels.length}단계 × 목표{" "}
+            {targetRs.length}개 중)만 비교합니다. 칸마다 쓰인 손절가·목표가는 표에 그대로 적었어요.
           </p>
         )}
         <ComboTable

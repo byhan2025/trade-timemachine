@@ -9,6 +9,9 @@ import {
   buildThermometer,
   buildStopLevels,
   compareCombos,
+  uniqueCells,
+  targetColumnLabels,
+  COMBO_R_TOLERANCE,
   simulateSurvival,
   sizePosition,
   SHORT_DISCLOSURE,
@@ -60,7 +63,14 @@ import {
   easyProfitCount,
   easyAvgMultiple,
   easyStopLevelLabel,
+  easyTargetMultiple,
   easySizingLine,
+  perBase,
+  pctThree,
+  greenRatePct,
+  replayDirection,
+  ZERO_SHARES_NOTE,
+  ZERO_SHARES_BANNER_NOTE,
   survivalIndexText,
   survivalFlatNote,
   axisLabels,
@@ -921,10 +931,10 @@ test("v2.2 신호등: 평균 금액 기준 임계값과 배지 문구가 계획�
   assert.equal(trafficLevel(0.001), "yellow");
   assert.equal(trafficLevel(0), "yellow");
   assert.equal(trafficLevel(0.182), "green");
-  assert.equal(trafficBadge(-0.182), "🔴 손실 쪽이 더 많았어요");
-  assert.equal(trafficBadge(0.001), "🟡 반반에 가까워요");
-  assert.equal(trafficBadge(0.182), "🟢 유리한 편이에요 (참고)");
-  assert.equal(TRAFFIC_BADGES.yellow, "🟡 반반에 가까워요");
+  assert.equal(trafficBadge(-0.182), "🔴 1번 평균은 손실 쪽이에요");
+  assert.equal(trafficBadge(0.001), "🟡 1번 평균은 거의 본전이에요");
+  assert.equal(trafficBadge(0.182), "🟢 1번 평균은 이익 쪽이에요 (참고)");
+  assert.equal(TRAFFIC_BADGES.yellow, "🟡 1번 평균은 거의 본전이에요");
   assert.equal(TRAFFIC_BASIS, "평균 금액 기준");
 });
 
@@ -1003,7 +1013,7 @@ test("v2.2 3줄 요약 전체: 전문 용어 없이 100번·원화로만 말한�
   });
   assert.equal(out.lines.length, 3);
   assert.equal(out.level, "red");
-  assert.equal(out.badge, "🔴 손실 쪽이 더 많았어요");
+  assert.equal(out.badge, "🔴 1번 평균은 손실 쪽이에요");
   const text = out.lines.join(" ");
   for (const word of ["R", "백분위", "미도달", "기댓값", "손익비", "중앙값", "%"]) {
     assert.ok(!text.includes(word), `쉬운 3줄에 '${word}'가 남아 있습니다: ${text}`);
@@ -1454,7 +1464,11 @@ test("v2.2.2 5초 요약 배너: 극단 입력은 평균 R 중립 + 참고 1줄,
   assert.match(banner, /className=\{positiveTone\(isExtremeStop\(run\.plan\.entry, run\.plan\.stop\)\)\}/);
   assert.match(banner, /data-testid="banner-p-target"/);
   assert.doesNotMatch(banner, /className="pos">\{formatPct\(run\.sim\.pTarget\)\}/);
-  assert.match(banner, /className="neg">\{formatPct\(run\.sim\.pStop\)\}/);
+  assert.match(banner, /className="neg" data-testid="banner-p-stop">\{bannerPct\.stop\}/);
+  // v2.2.4 — 배너도 결과 카드와 같은 0.1% 표기 + 미도달을 적어 세 값의 합이 100%가 된다
+  assert.match(banner, /bannerPct\.target/);
+  assert.match(banner, /data-testid="banner-p-neither"/);
+  assert.doesNotMatch(banner, /formatPct\(run\.sim\.pTarget\)/);
   // 결과 카드에도 같은 극단 플래그를 넘긴다
   assert.match(app, /<ResultCards[\s\S]{0,260}extreme=\{isExtremeStop\(run\.plan\.entry, run\.plan\.stop\)\}/);
 });
@@ -1691,4 +1705,366 @@ test("v2.2.3 CSS: 중립 카드의 값도 초록을 쓰지 않는다", () => {
   assert.doesNotMatch(rule, /#16a34a|#15803d|var\(--target\)/);
   // 녹색 목표 카드는 일반 입력용으로 그대로 남는다
   assert.match(ruleOf(".stat-target"), /var\(--target-bg\)/);
+});
+
+/* ================================================================ v2.2.4 4호 봇 지적 3건 */
+
+const noteOf = (html, testid) => {
+  const m = new RegExp(`data-testid="${testid}"[^>]*>([\\s\\S]*?)</span>`).exec(html);
+  return m ? m[1] : "";
+};
+
+test("v2.2.4 결함1: 0주(무포지션)와 극단 손절폭은 서로 다른 경고다", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  // 진입 200,000 / 손절 199,000 = 손절폭 0.5% (극단 아님) · 계좌 100,000 → 1주 가격 초과로 0주
+  const size = sizePosition({
+    entry: 200_000,
+    stop: 199_000,
+    target: 300_000,
+    account: 100_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: -0.29,
+  });
+  assert.equal(size.shares, 0);
+  assert.equal(isExtremeStop(200_000, 199_000), false);
+  const html = renderToStaticMarkup(
+    SizingCard({ size, unit: "원", account: 100_000, riskPct: 1, extreme: isExtremeStop(200_000, 199_000) })
+  );
+  // 1번 평균 각주에 '극단적으로 좁은 손절폭'이 새어 나오면 안 된다
+  const evNote = noteOf(html, "expected-value-note");
+  assert.ok(!evNote.includes("극단적으로 좁은 손절폭"), evNote);
+  assert.match(evNote, /0주라 1번에 거는 손절 금액이 없어 기댓값도 0원이에요/);
+  assert.match(html, /0주라 목표에 닿아도 버는 돈이 없어요/);
+  assert.ok(!html.includes("극단적으로 좁은 손절폭"), "0주 카드 어디에도 극단 손절폭 문구가 없어야 한다");
+
+  // 0주이면서 손절폭도 극단인 입력 — 기댓값 0원의 원인은 0주다
+  const extremeZero = sizePosition({
+    entry: 200_000,
+    stop: 199_999.98,
+    target: 300_000,
+    account: 100_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: 0,
+  });
+  assert.equal(extremeZero.shares, 0);
+  assert.equal(isExtremeStop(200_000, 199_999.98), true);
+  const html2 = renderToStaticMarkup(
+    SizingCard({ size: extremeZero, unit: "원", account: 100_000, riskPct: 1, extreme: true })
+  );
+  assert.ok(!noteOf(html2, "expected-value-note").includes("극단적으로 좁은 손절폭"));
+
+  // 수량이 있는 극단 입력에서는 종전대로 극단 경고가 나온다 (회귀 방지)
+  const extreme = sizePosition({
+    entry: 100_000,
+    stop: 99_999.99,
+    target: 100_100,
+    account: 10_000_000,
+    riskPct: 1,
+    side: "buy",
+    expectedR: 729.07,
+  });
+  assert.ok(extreme.shares > 0);
+  const html3 = renderToStaticMarkup(
+    SizingCard({ size: extreme, unit: "원", account: 10_000_000, riskPct: 1, extreme: true })
+  );
+  assert.match(noteOf(html3, "expected-value-note"), /극단적으로 좁은 손절폭이라 참고하기 어려워요/);
+  assert.ok(!html3.includes("0주라 1번에 거는 손절 금액이 없어"), "수량이 있으면 0주 문구는 없다");
+
+  // 0주 한 줄 요약에도 극단 문구가 섞이지 않는다
+  const zeroLine = easySizingLine({
+    shares: 0,
+    side: "buy",
+    account: 100_000,
+    riskPct: 1,
+    lossBudget: 1_000,
+    maxLoss: 0,
+    effectiveRiskPct: 0,
+    riskLimitedByCash: false,
+    unit: "원",
+    entry: 200_000,
+    riskPerShare: 1_000,
+    extreme: false,
+  });
+  assert.ok(!zeroLine.includes("극단적으로 좁은 손절폭"), zeroLine);
+  assert.match(zeroLine, /1주 가격\(200,000원\)이 계좌 금액\(100,000원\)보다 커서 0주가 됐어요/);
+});
+
+test("v2.2.4 결함2: 조합표 열 이름·칸이 실제 목표가의 배수를 가리키고, 같은 목표가는 한 번만 계산한다", () => {
+  const d = datasetFor();
+  const pool = buildPool(d.sessions, d.times.length);
+  const entry = 100_000;
+  // 진입 100,000 / 손절 99,999.99 → 1원 호가에서 손절 단계가 1개로 줄고, 1.5배 목표가 100,002원(=실제 2배)이 된다
+  const levels = buildStopLevels(entry, 0.01 / entry, "원", "buy");
+  const res = compareCombos({ pool, entry, side: "buy", entryBar: 5, levels, replays: 200, unit: "원" });
+  for (const c of res.cells) {
+    const risk = Math.abs(entry - c.stop);
+    assert.ok(Math.abs(c.actualR - Math.abs(c.target - entry) / risk) < 1e-9, `actualR 불일치 ${c.targetR}`);
+  }
+  const dup = res.cells.find((c) => c.duplicateOfR !== undefined);
+  assert.ok(dup, "같은 목표가를 두 번 계산했습니다");
+  const orig = res.cells.find((c) => c.stopPct === dup.stopPct && c.targetR === dup.duplicateOfR);
+  assert.equal(dup.target, orig.target);
+  assert.equal(dup.pGreen, orig.pGreen);
+  assert.equal(dup.avgR, orig.avgR);
+  assert.equal(uniqueCells(res.cells).length, res.cells.length - res.duplicateCount);
+  assert.ok(res.duplicateCount > 0);
+
+  const cols = targetColumnLabels(res.cells, res.targetRs);
+  const col15 = cols.find((c) => c.targetR === 1.5);
+  assert.equal(col15.deviating, true, "1.5배 열이 실제 2배인데 요청 배수로 표기됩니다");
+  assert.ok(Math.abs(col15.label - 2) < 1e-9, `열 이름 배수 ${col15.label}`);
+  const col1 = cols.find((c) => c.targetR === 1);
+  assert.equal(col1.deviating, false);
+  assert.equal(easyTargetMultiple(col15.label), "2배");
+  assert.equal(easyTargetMultiple(1.5), "1.5배");
+  assert.equal(easyTargetMultiple(1), "1배");
+  assert.equal(easyTargetMultiple(100), "100배");
+  assert.equal(easyTargetMultiple(1.3333), "1.33배");
+
+  // 일반 입력(손절폭 수천 원)에서는 호가 반올림이 배수를 바꾸지 않는다 → ＊ 없음
+  const normalLevels = buildStopLevels(100_130, 0.011, "원", "buy");
+  const normal = compareCombos({
+    pool,
+    entry: 100_130,
+    side: "buy",
+    entryBar: 5,
+    levels: normalLevels,
+    replays: 100,
+    unit: "원",
+  });
+  for (const c of targetColumnLabels(normal.cells, normal.targetRs)) {
+    assert.equal(c.deviating, false, `요청 ${c.targetR}배가 실제와 어긋난다고 표시됨`);
+  }
+  assert.equal(normal.duplicateCount, 0);
+  // 행 이름도 실제(반올림된) 손절폭 기준 — 5% 차이를 '내 계획 그대로'로 보지 않는다
+  assert.equal(easyStopLevelLabel(0.0105, 0.01), "내 계획의 1.1배");
+  assert.equal(easyStopLevelLabel(0.01002, 0.01), "내 계획 그대로");
+});
+
+test("v2.2.4 결함3: 3줄 결론·배지·100번 횟수가 실제 수치와 모순되지 않는다", () => {
+  // 100번 기준에서 0번이 되는 0.4% 목표 도달을 '간 경우는 없었고'라고 말하지 않는다
+  const rare = easyLine1({ pTarget: 0.004, pStop: 0.93, pNeither: 0.066, side: "buy" });
+  assert.match(rare, /^1만 번 해보면 약 40번은 목표 가격까지 올라서 기분 좋게 끝났고/);
+  assert.ok(!rare.includes("목표 가격까지 간 경우는 없었고"), rare);
+  const counts = [...rare.matchAll(/(\d[\d,]*)번/g)].map((m) => Number(m[1].replace(/,/g, "")));
+  assert.deepEqual(counts, [40, 9300, 660]);
+  assert.equal(counts.reduce((a, b) => a + b, 0), 10000);
+  // 실제로 0건일 때만 '없었어요'라고 말한다
+  const zero = easyLine1({ pTarget: 0, pStop: 0, pNeither: 1, side: "buy", replays: 10000 });
+  assert.match(zero, /목표 가격까지 간 경우는 없었고/);
+  assert.match(zero, /손절 가격까지 간 경우도 없었어요/);
+
+  // 목표·손절 횟수가 같으면 '더 많았어요'라고 말하지 않는다
+  const tie = easyConclusion({ avgR: -0.1, pTarget: 0.4, pStop: 0.4, ratio: 1, rr: 2, sessions: 3, replays: 10000 });
+  assert.match(tie, /똑같았어요/);
+  assert.ok(!tie.includes("더 많았어요"), tie);
+  // 둘 다 0회(전부 미도달) — '목표에 닿는 쪽이 더 많았다'는 거짓
+  const none = easyConclusion({ avgR: 0.001, pTarget: 0, pStop: 0, ratio: 2.4, rr: 2, sessions: 3, replays: 10000 });
+  assert.match(none, /목표에도 손절에도 닿지 않고 장이 끝난 경우만 있었어요/);
+  assert.ok(!none.includes("더 많았어요"), none);
+  // 한쪽만 0회
+  const tOnly = easyConclusion({ avgR: 0.3, pTarget: 0.3, pStop: 0, ratio: 1, rr: 2, sessions: 3, replays: 10000 });
+  assert.match(tOnly, /손절에 닿은 경우 없이 목표 쪽으로만/);
+  const sOnly = easyConclusion({ avgR: -0.3, pTarget: 0, pStop: 0.7, ratio: 0.3, rr: 2, sessions: 3, replays: 10000 });
+  assert.match(sOnly, /손절로 끝난 경우만 있었어요/);
+  assert.equal(replayDirection(0.5, 0.5), "tie");
+  assert.equal(replayDirection(0, 0), "bothZero");
+  assert.equal(replayDirection(0.3, 0.6), "stop");
+
+  // 배지가 '더 많았어요'(횟수)나 '반반'이라고 말하지 않는다 — 기준은 1번 평균 금액(평균 R)
+  for (const b of Object.values(TRAFFIC_BADGES)) {
+    assert.ok(!b.includes("더 많았어요"), b);
+    assert.ok(!b.includes("반반에 가까워요"), b);
+    assert.ok(!b.includes("유리한 편이에요"), b);
+  }
+  // 지는 판이 더 적어도(목표 60% vs 손절 20%) 한 번에 크게 잃으면 평균은 손실 — 배지도 평균 기준
+  const nearTarget = easySummary({
+    sim: {
+      replays: 10000,
+      pTarget: 0.6,
+      pStop: 0.2,
+      pNeither: 0.2,
+      pGreen: 0.66,
+      avgR: -0.09,
+      rAtTarget: 0.2,
+      barsLeft: 10,
+    },
+    oneR: 100_000,
+    shares: 10,
+    unit: "원",
+    side: "buy",
+    ratio: 1,
+    rr: 0.2,
+    sessions: 30,
+  });
+  assert.equal(nearTarget.level, "red");
+  assert.equal(nearTarget.badge, "🔴 1번 평균은 손실 쪽이에요");
+
+  // 퍼센트 표기: 세 값의 합이 100.0%, 이익 마감률 = 목표 도달 + 유리 마감 (반올림 모순 없음)
+  for (const [a, b, c, g] of [
+    [0.004, 0.93, 0.066, 0.04],
+    [0.242, 0.695, 0.063, 0.287],
+    [0.333, 0.333, 0.334, 0.7],
+    [0, 0, 1, 0.434],
+    [0.074, 0.926, 0, 0.074],
+  ]) {
+    const p3 = pctThree(a, b, c);
+    const nums = [p3.target, p3.stop, p3.neither].map((s) => (s === "<0.1%" ? 0.05 : Number(s.replace("%", ""))));
+    assert.ok(Math.abs(nums.reduce((x, y) => x + y, 0) - 100) < 0.2, JSON.stringify(p3));
+    const gr = greenRatePct(a, g);
+    const parts = [gr.target, gr.extra].map((s) => (s === "<0.1%" ? 0.05 : Number(s.replace("%", ""))));
+    const total = gr.total === "<0.1%" ? 0.05 : Number(gr.total.replace("%", ""));
+    assert.ok(Math.abs(parts[0] + parts[1] - total) < 0.15, `${gr.total} ≠ ${gr.target} + ${gr.extra}`);
+  }
+  // 0주 판정은 금액이 아니라 가격 움직임만 본 값임을 요약에 남긴다
+  const zeroSummary = easySummary({
+    sim: { replays: 10000, pTarget: 0.2, pStop: 0.6, pNeither: 0.2, pGreen: 0.25, avgR: -0.1, rAtTarget: 1, barsLeft: 9 },
+    oneR: 0,
+    shares: 0,
+    unit: "원",
+    side: "buy",
+    ratio: 1,
+    rr: 2,
+    sessions: 30,
+  });
+  assert.equal(zeroSummary.note, ZERO_SHARES_NOTE);
+  assert.match(ZERO_SHARES_NOTE, /매매가 한 번도 실행되지 않아요/);
+  const withShares = easySummary({
+    sim: { replays: 10000, pTarget: 0.2, pStop: 0.6, pNeither: 0.2, pGreen: 0.25, avgR: -0.1, rAtTarget: 1, barsLeft: 9 },
+    oneR: 100_000,
+    shares: 10,
+    unit: "원",
+    side: "buy",
+    ratio: 1,
+    rr: 2,
+    sessions: 30,
+  });
+  assert.equal(withShares.note, undefined);
+});
+
+test("v2.2.4 배선: 배너·결과 카드·리포트가 같은 퍼센트 표기와 0주 안내를 쓴다", () => {
+  const read = (f) => readFileSync(f, "utf8");
+  const app = read("src/App.tsx");
+  const banner = app.slice(app.indexOf('data-testid="easy-banner"'), app.indexOf('data-testid="open-report"'));
+  assert.match(app, /const bannerPct = run\s*\n?\s*\?\s*pctThree\(run\.sim\.pTarget, run\.sim\.pStop, run\.sim\.pNeither\)/);
+  assert.match(banner, /bannerPct\.target/);
+  assert.match(banner, /bannerPct\.stop/);
+  assert.match(banner, /bannerPct\.neither/);
+  assert.match(banner, /ZERO_SHARES_BANNER_NOTE/);
+  assert.doesNotMatch(banner, /formatPct\(run\.sim\.p(?:Target|Stop)\)/);
+
+  const cards = read("src/components/ResultCards.tsx");
+  assert.match(cards, /pctThree\(sim\.pTarget, sim\.pStop, sim\.pNeither\)/);
+  assert.match(cards, /greenRatePct\(sim\.pTarget, sim\.pGreen\)/);
+  assert.ok(!cards.includes("splitHundred"));
+  assert.ok(!cards.includes("pctText"));
+
+  const rep = read("src/components/ReportView.tsx");
+  assert.match(rep, /pctThree\(run\.sim\.pTarget, run\.sim\.pStop, run\.sim\.pNeither\)/);
+  assert.match(rep, /greenRatePct\(run\.sim\.pTarget, run\.sim\.pGreen\)/);
+  assert.match(rep, /easy\.note/);
+  assert.match(rep, /data-testid="zero-share-note"/);
+  // 조합표 설명·배지가 실제 손절 단계와 목표 배수를 그대로 쓴다
+  assert.match(rep, /const levelWords = levels\.map\(\(l\) => easyStopLevelLabel\(l\.stopPct, stopPct\)\)/);
+  assert.match(rep, /levelWords\.join/);
+  assert.match(rep, /손절 \{levels\.length\} × 목표 \{targetRs\.length\}/);
+  // Combine table: 중복 칸·＊ 안내
+  const combo = read("src/components/ComboTable.tsx");
+  assert.match(combo, /targetColumnLabels\(result\.cells, result\.targetRs\)/);
+  assert.match(combo, /data-testid="combo-target-note"/);
+  assert.match(combo, /data-testid="combo-cell-dup"/);
+  assert.match(combo, /data-testid="combo-cell-actual"/);
+  assert.match(combo, /실제 \{easyTargetMultiple\(cell\.actualR\)\}/);
+});
+
+test("v2.2.4 버전 표기: package.json·배지·푸터·README 가 같은 버전을 가리킨다", () => {
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  assert.equal(pkg.version, "2.2.4");
+  const app = readFileSync("src/App.tsx", "utf8");
+  assert.match(app, /v2\.2\.4 · /);
+  assert.match(app, /한국형 타임머신 시뮬레이터 v2\.2\.4/);
+  const readme = readFileSync("README.md", "utf8");
+  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.2\.4\)/);
+});
+
+test("v2.2.4 봇 재현 ②: 진입 100,000 / 손절 99,999 / 목표 100,002 — 표에 1.5배가 아니라 실제 2배로 적힌다", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { ComboTable, h } = await import("./.build/lib.mjs");
+  const d = datasetFor();
+  const pool = buildPool(d.sessions, d.times.length);
+  // 봇이 지목한 재현 입력: 손절폭 1원(0.001%) → 1원 호가에서 손절 단계 1개, 목표 1.5배 = 100,002원 = 실제 2배
+  const entry = 100_000;
+  const stop = 99_999;
+  const baseStopPct = Math.abs(entry - stop) / entry;
+  const levels = buildStopLevels(entry, baseStopPct, "원", "buy");
+  const result = compareCombos({ pool, entry, side: "buy", entryBar: 5, levels, replays: 200, unit: "원" });
+  const html = renderToStaticMarkup(
+    h(ComboTable, {
+      result,
+      loading: false,
+      unit: "원",
+      mode: "green",
+      onMode: () => {},
+      baseStopPct,
+      extreme: false,
+    })
+  );
+  // 목표가 100,002원 칸은 '목표 2배'로 적고, 요청이 1.5배였다는 사실을 함께 남긴다
+  assert.match(html, /목표 2배/);
+  assert.match(html, /요청 1\.5배/);
+  assert.ok(!/목표 1\.5배/.test(html), "1.5배 열 이름이 그대로 남아 있습니다");
+  assert.match(html, /100,002원 · 실제 2배/);
+  // 같은 목표가를 두 번 계산하지 않고, 다른 칸은 '앞 칸과 목표가 같아요'로 표시한다
+  assert.match(html, /앞 칸과 목표가 같아요/);
+  assert.equal(result.duplicateCount, 1);
+  assert.match(html, /호가 단위\(1원\)/);
+  assert.ok(!html.includes("더 많았어요"));
+  const cells = await (async () => result.cells)();
+  for (const c of cells) {
+    if (c.target === 100_002) assert.ok(Math.abs(c.actualR - 2) < 1e-9, `actualR ${c.actualR}`);
+  }
+});
+
+test("v2.2.4 봇 재현 ③: 목표 도달률 0.01%(1만 번 중 1번)를 '없었고'라고 말하지 않는다", () => {
+  const sim = {
+    replays: 10000,
+    pTarget: 0.0001,
+    pStop: 0.9299,
+    pNeither: 0.07,
+    pGreen: 0.0001,
+    avgR: -0.86,
+    rAtTarget: 1,
+    barsLeft: 59,
+  };
+  // 1만 번 중 1번 일어난 일을 100번 기준 0번으로 뭉개지 않는다
+  const line = easyLine1({ pTarget: sim.pTarget, pStop: sim.pStop, pNeither: sim.pNeither, side: "buy", replays: 10000 });
+  assert.match(line, /^1만 번 해보면 약 1번은 목표 가격까지 올라서/);
+  assert.ok(!line.includes("없었고"), line);
+  assert.match(line, /9,?299번은 손절 가격까지/);
+  assert.match(line, /나머지 700번은/);
+  // 화면 퍼센트도 0.0%로 지우지 않고 0.01%로 적는다 — 접이식 산식·카드·배너가 같은 값
+  const p3 = pctThree(sim.pTarget, sim.pStop, sim.pNeither);
+  assert.deepEqual(p3, { target: "0.01%", stop: "92.99%", neither: "7.00%" });
+  // 전부 손실(이익 마감률 0%)이어도 NaN 없이 0.0%로 적는다
+  assert.deepEqual(greenRatePct(0, 0), { total: "0.0%", target: "0.0%", extra: "0.0%" });
+  assert.deepEqual(pctThree(0, 1, 0), { target: "0.0%", stop: "100.0%", neither: "0.0%" });
+  const items = easyMathDetail({ sim, oneR: 100_000, unit: "원" }).join("\n");
+  assert.match(items, /목표 도달 0\.01% · 손절 도달 92\.99% · 장 마감 미도달 7\.00%/);
+  assert.match(items, /이익 마감률 0\.01% = 목표 도달 0\.01% \+ 목표 미도달 유리 마감 0\.00%/);
+  // 0주(무포지션)에서도 같은 문장이 그대로 성립한다
+  const zero = easySummary({
+    sim,
+    oneR: 0,
+    shares: 0,
+    unit: "원",
+    side: "buy",
+    ratio: 1,
+    rr: 1,
+    sessions: 30,
+  });
+  assert.match(zero.lines[0], /1만 번 해보면 약 1번은 목표 가격까지/);
+  assert.ok(!zero.lines[0].includes("없었고"), zero.lines[0]);
+  assert.equal(zero.note, ZERO_SHARES_NOTE);
 });

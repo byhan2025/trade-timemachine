@@ -8,7 +8,16 @@ export { simulate } from "../src/lib/simulate";
 export { historyReplay } from "../src/lib/backtest";
 export { buildThermometer } from "../src/lib/thermometer";
 export { sizePosition, SHORT_DISCLOSURE, EXTREME_STOP_RATIO } from "../src/lib/sizing";
-export { buildStopLevels, compareCombos, pickBestCell } from "../src/lib/combos";
+export {
+  buildStopLevels,
+  compareCombos,
+  pickBestCell,
+  uniqueCells,
+  targetColumnLabels,
+  COMBO_STOP_MULTIPLIERS,
+  COMBO_TARGET_MULTIPLES,
+  COMBO_R_TOLERANCE,
+} from "../src/lib/combos";
 export { simulateSurvival } from "../src/lib/survival";
 export { summaryLines, avgRBreakdown } from "../src/lib/summary";
 export {
@@ -54,7 +63,13 @@ export {
   FLAT_R,
   trafficLevel,
   trafficBadge,
+  perBase,
   perHundred,
+  pctThree,
+  greenRatePct,
+  replayDirection,
+  ZERO_SHARES_NOTE,
+  ZERO_SHARES_BANNER_NOTE,
   approxMoney,
   avgMoneyPerTrade,
   easyMoneyChip,
@@ -67,9 +82,12 @@ export {
   easyProfitCount,
   easyAvgMultiple,
   easyStopLevelLabel,
+  easyTargetMultiple,
   easySizingLine,
   survivalIndexText,
   survivalFlatNote,
 } from "../src/lib/easy";
 export { ResultCards } from "../src/components/ResultCards";
 export { SizingCard, isExtremeStop } from "../src/components/SizingCard";
+export { ComboTable } from "../src/components/ComboTable";
+export { createElement as h } from "react";

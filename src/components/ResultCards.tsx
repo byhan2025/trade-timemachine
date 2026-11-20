@@ -1,25 +1,14 @@
 import type { Dataset } from "../lib/types";
 import type { SimResult } from "../lib/simulate";
 import { formatPriceNumber, formatR } from "../lib/format";
-import { EXTREME_AVG_R_NOTE, EXTREME_POSITIVE_NOTE, avgRTone, positiveTone } from "../lib/easy";
-
-function pctText(x: number): string {
-  if (x > 0 && x < 0.0005) return "<0.1%";
-  return `${(x * 100).toFixed(1)}%`;
-}
-
-/** 세 칸의 표시값 합이 정확히 100.0%가 되도록 최대잔여법으로 반올림 */
-function splitHundred(values: number[]): number[] {
-  const raw = values.map((v) => v * 1000);
-  const floors = raw.map((v) => Math.floor(v));
-  const rest = 1000 - floors.reduce((a, b) => a + b, 0);
-  const order = raw
-    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
-    .sort((a, b) => b.frac - a.frac);
-  const out = floors.slice();
-  for (let k = 0; k < rest && k < order.length * 2; k++) out[order[k % order.length].i] += 1;
-  return out;
-}
+import {
+  EXTREME_AVG_R_NOTE,
+  EXTREME_POSITIVE_NOTE,
+  avgRTone,
+  greenRatePct,
+  pctThree,
+  positiveTone,
+} from "../lib/easy";
 
 /** "2026-11-20T00:03:36+09:00" -> "2026-11-20 00:03" (그 외 형식은 그대로) */
 function shortTime(value: string): string {
@@ -64,13 +53,15 @@ export function ResultCards({
   /** 극단 입력이면 긍정(초록) 강조를 끈다 — 목표 카드·이익 마감률 모두 중립(v2.2.3) */
   const positive = positiveTone(extreme === true);
   const fmt = (x: number) => formatPriceNumber(x, unit);
-  const tenths = splitHundred([sim.pTarget, sim.pStop, sim.pNeither]);
+  /** 세 칸·이익 마감률 구성의 표기는 easy.ts 한 곳에서 — 5초 요약 배너·리포트와 같은 문자열을 쓴다 */
+  const p3 = pctThree(sim.pTarget, sim.pStop, sim.pNeither);
+  const green = greenRatePct(sim.pTarget, sim.pGreen);
   const items = [
     {
       key: "target",
       label: "목표가 먼저 도달",
       value: sim.pTarget,
-      tenths: tenths[0],
+      text: p3.target,
       // 녹색 목표 카드는 '좋은 결과' 강조라 극단 입력에서는 중립 카드로 바꿔 끈다
       color: extreme === true ? "neutral" : "target",
       caption: `${Math.round(sim.pTarget * sim.replays).toLocaleString("ko-KR")}회`,
@@ -79,7 +70,7 @@ export function ResultCards({
       key: "stop",
       label: "손절가 먼저 도달",
       value: sim.pStop,
-      tenths: tenths[1],
+      text: p3.stop,
       color: "stop",
       caption: `${Math.round(sim.pStop * sim.replays).toLocaleString("ko-KR")}회`,
     },
@@ -87,12 +78,11 @@ export function ResultCards({
       key: "neither",
       label: "장 마감까지 미도달",
       value: sim.pNeither,
-      tenths: tenths[2],
+      text: p3.neither,
       color: "neutral",
       caption: `${Math.round(sim.pNeither * sim.replays).toLocaleString("ko-KR")}회`,
     },
   ];
-  const greenOnly = Math.max(0, sim.pGreen - sim.pTarget);
   return (
     <div className="result-block" aria-live="polite">
       <div className="result-head">
@@ -111,9 +101,7 @@ export function ResultCards({
         {items.map((it) => (
           <div key={it.key} className={`stat-card stat-${it.color}`}>
             <span className="stat-label">{it.label}</span>
-            <strong className="stat-value">
-              {it.tenths === 0 && it.value > 0 ? "<0.1%" : `${(it.tenths / 10).toFixed(1)}%`}
-            </strong>
+            <strong className="stat-value">{it.text}</strong>
             <span className="stat-caption">{it.caption}</span>
           </div>
         ))}
@@ -129,11 +117,11 @@ export function ResultCards({
             이익 마감률 <strong>(목표 도달 + 종가 유리 마감)</strong>
           </span>
           <strong className={positive} data-testid="green-close-rate">
-            {pctText(sim.pGreen)}
+            {green.total}
           </strong>
           <span className="muted small">
             {" "}
-            (목표 도달 {pctText(sim.pTarget)} + 목표 미도달이나 종가만 유리 {pctText(greenOnly)})
+            (목표 도달 {green.target} + 목표 미도달이나 종가만 유리 {green.extra})
           </span>
         </div>
         <div data-testid="avg-r-row">

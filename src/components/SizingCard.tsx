@@ -145,10 +145,16 @@ export function SizingCard({
           {/* 극단 입력이면 목표 수익도 초록 강조 없이 중립 회색 (v2.2.3) */}
           <dd className={neutralValue ? "neutral" : "pos"} data-testid="profit-at-target">
             {moneyLabel(size.profitAtTarget, unit)}
-            {extremeStop && (
-              <span className="kv-sub" data-testid="profit-extreme-note">
-                극단적으로 좁은 손절폭이라 이 금액은 참고하기 어려워요
+            {noPosition ? (
+              <span className="kv-sub" data-testid="profit-zero-note">
+                0주라 목표에 닿아도 버는 돈이 없어요
               </span>
+            ) : (
+              extremeStop && (
+                <span className="kv-sub" data-testid="profit-extreme-note">
+                  극단적으로 좁은 손절폭이라 이 금액은 참고하기 어려워요
+                </span>
+              )
             )}
           </dd>
         </div>
@@ -161,7 +167,17 @@ export function SizingCard({
             {formatMoneySigned(size.expectedValue, unit)}
             <span className="kv-sub" data-testid="expected-value-note">
               {expectedValueNote(size.side, size.expectedR)}
-              {neutralValue ? " · 극단적으로 좁은 손절폭이라 참고하기 어려워요" : ""}
+              {/*
+                v2.2.4 — 0주(무포지션)와 극단 손절폭은 서로 다른 이유다.
+                `neutralValue`(색)에 손절폭 경고를 묶어 두어, 0주인데 손절폭은 정상인 입력
+                (진입 200,000 / 손절 199,000 / 계좌 100,000)에 "극단적으로 좁은 손절폭"이
+                잘못 붙던 문제를 원인별 문구로 분리한다.
+              */}
+              {noPosition
+                ? " · 0주라 1번에 거는 손절 금액이 없어 기댓값도 0원이에요"
+                : extremeStop
+                  ? " · 극단적으로 좁은 손절폭이라 참고하기 어려워요"
+                  : ""}
             </span>
           </dd>
         </div>

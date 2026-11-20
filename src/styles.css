@@ -1683,7 +1683,7 @@ a:focus-visible {
 .combo-grid-head,
 .combo-grid-row {
   display: grid;
-  grid-template-columns: minmax(66px, 1.05fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(66px, 1.05fr) repeat(var(--combo-cols, 3), minmax(0, 1fr));
   gap: 4px;
   align-items: stretch;
 }
@@ -1721,6 +1721,26 @@ a:focus-visible {
   text-align: center;
   padding: 2px 0;
   word-break: keep-all;
+}
+
+.combo-col-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+.combo-col-head strong {
+  font-size: 12.5px;
+  color: #334155;
+}
+
+/* 요청 배수와 실제 배수가 다른 열 — 요청값을 작게 병기해 표기와 계산이 함께 읽힌다 */
+.combo-col-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .combo-corner {
@@ -1791,6 +1811,28 @@ a:focus-visible {
 .combo-cell.picked {
   border-color: #0f172a;
   background: #e2e8f0;
+}
+
+/* 같은 행에서 목표가가 겹친 칸 — 숫자를 반복하지 않고 '같은 목표가'로만 적는다(v2.2.4) */
+.combo-cell-dup {
+  cursor: default;
+  color: #55617a;
+  background: #f1f5f9;
+  border-style: dashed;
+}
+
+/* 요청 배수와 실제 배수가 다른 열의 칸 — 실제 목표가·배수를 칸 안에 같이 적는다 */
+.combo-cell-actual {
+  font-size: 12px;
+  font-weight: 600;
+  color: #55617a;
+  line-height: 1.25;
+  word-break: keep-all;
+}
+
+.combo-target-note {
+  margin: 6px 0 8px;
+  font-weight: 600;
 }
 
 .combo-best-star {
@@ -1970,7 +2012,7 @@ a:focus-visible {
   }
   .combo-grid-head,
   .combo-grid-row {
-    grid-template-columns: minmax(58px, 1fr) repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(58px, 1fr) repeat(var(--combo-cols, 3), minmax(0, 1fr));
   }
   .combo-cell {
     font-size: 12px;

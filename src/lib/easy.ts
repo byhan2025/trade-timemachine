@@ -24,11 +24,17 @@ import { avgRBreakdown } from "./summary";
 
 export type TrafficLevel = "red" | "yellow" | "green" | "neutral";
 
-/** 맨 위 신호등 — 판정 기준은 '1번에 평균 얼마가 남았나'(평균 금액)'다 */
+/**
+ * 맨 위 신호등 — 판정 기준은 '1번에 평균 얼마가 남았나'(평균 금액)다.
+ *
+ * v2.2.4 — 배지 문구가 '더 많았어요 / 반반'처럼 **횟수**를 말하고 바로 아래 기준 줄은
+ * '평균 금액 기준'이라고 적어 서로 모순이었다. 지는 판의 수가 더 적어도 한 번에 크게 잃으면
+ * 평균은 손실이 되기 때문에(목표가 손절보다 가까운 입력에서 흔하다), 배지도 평균 기준으로 적는다.
+ */
 export const TRAFFIC_BADGES: Record<TrafficLevel, string> = {
-  red: "🔴 손실 쪽이 더 많았어요",
-  yellow: "🟡 반반에 가까워요",
-  green: "🟢 유리한 편이에요 (참고)",
+  red: "🔴 1번 평균은 손실 쪽이에요",
+  yellow: "🟡 1번 평균은 거의 본전이에요",
+  green: "🟢 1번 평균은 이익 쪽이에요 (참고)",
   /** 4번째 상태 — 손절폭이 극단적으로 좁아 판정 자체를 보류한다(v2.2.1) */
   neutral: "⚪ 참고하기 어려워요",
 };
@@ -99,14 +105,14 @@ export function trafficBadge(avgR: number, extreme = false): string {
 }
 
 /**
- * 비율 3개를 '100번 중 몇 번' 정수로 나눈다(최대잔여법).
- * 셋의 합이 정확히 100이 되게 해서 "24 + 70 + 6 = 100"처럼 아이가 더해 볼 수 있게 한다.
+ * 비율들을 '기준 base번 중 몇 번' 정수로 나눈다(최대잔여법).
+ * 합이 정확히 base가 되게 해서 아이가 더해 볼 수 있게 한다.
  */
-export function perHundred(values: number[]): number[] {
+export function perBase(values: number[], base = 100): number[] {
   if (!values.length) return [];
-  const raw = values.map((v) => (isFinite(v) && v > 0 ? v * 100 : 0));
+  const raw = values.map((v) => (isFinite(v) && v > 0 ? v * base : 0));
   const floors = raw.map((v) => Math.floor(v));
-  let rest = 100 - floors.reduce((a, b) => a + b, 0);
+  let rest = base - floors.reduce((a, b) => a + b, 0);
   const order = raw
     .map((v, i) => ({ i, frac: v - Math.floor(v) }))
     .sort((a, b) => b.frac - a.frac || a.i - b.i);
@@ -118,6 +124,78 @@ export function perHundred(values: number[]): number[] {
     k += 1;
   }
   return out;
+}
+
+/** 비율 3개를 '100번 중 몇 번' 정수로 나눈다 — 합이 정확히 100 */
+export function perHundred(values: number[]): number[] {
+  return perBase(values, 100);
+}
+
+/* ------------------------------------------------------ 퍼센트 표기 한 곳에서 */
+
+/**
+ * 비율들을 화면 퍼센트 문자열로 나눈다 — 합이 100.0%(또는 total)가 되고,
+ * 0보다 큰 값이 0으로 지워지지 않는 **가장 짧은 소수 자릿수**를 스스로 고른다(v2.2.4).
+ *
+ * 0.1% 단위로 고정하면 1만 번 중 1번(0.01%)이 0.0%로 사라지고, 그 값이 다른 문장의
+ * "1만 번 중 1번"과 어긋난다. 그래서 자릿수를 하나씩 늘려 가며 실제로 일어난 값을 살린다.
+ */
+function splitPctParts(values: number[], total = 1, minDigits = 1, maxDigits = 4) {
+  // 이익 마감률 0%(전부 손실)처럼 나눌 값이 없으면 자릿수를 늘리지 않고 0으로 적는다
+  if (!(total > 0)) return { parts: values.map(() => 0), digits: minDigits };
+  let digits = maxDigits;
+  let parts: number[] = [];
+  for (let d = minDigits; d <= maxDigits; d++) {
+    const base = Math.round(total * 100 * Math.pow(10, d));
+    if (!(base > 0)) continue;
+    const candidate = perBase(values, base);
+    const keepsSmallValues = values.every((v, i) => !(v > 0) || candidate[i] > 0);
+    if (keepsSmallValues) return { parts: candidate, digits: d };
+    digits = d;
+    parts = candidate;
+  }
+  const base = Math.max(0, Math.round(total * 100 * Math.pow(10, maxDigits)));
+  return { parts: parts.length ? parts : perBase(values, base), digits };
+}
+
+/** 정수부(퍼센트 × 10^digits) → "24.2%" / "0.01%" */
+function fmtPctParts(value: number, digits: number): string {
+  return `${(value / Math.pow(10, digits)).toFixed(digits)}%`;
+}
+
+type ThreePct = { target: string; stop: string; neither: string };
+
+/**
+ * 목표 도달·손절 도달·미도달 세 비율의 화면 표기(v2.2.4).
+ * 5초 요약 배너·결과 카드·리포트 접이식 통계가 **같은 문자열**을 쓰게 해서,
+ * 같은 화면에서 24.2% / 24.3%처럼 서로 다른 반올림이 보이거나 세 값의 합이 100%가 되지 않는 일을 없앤다.
+ */
+export function pctThree(pTarget: number, pStop: number, pNeither: number): ThreePct {
+  const { parts, digits } = splitPctParts([pTarget, pStop, pNeither], 1);
+  return {
+    target: fmtPctParts(parts[0], digits),
+    stop: fmtPctParts(parts[1], digits),
+    neither: fmtPctParts(parts[2], digits),
+  };
+}
+
+type GreenPct = { total: string; target: string; extra: string };
+
+/**
+ * 이익 마감률과 그 구성(목표 도달 + 목표 미도달 유리 마감)의 표기(v2.2.4).
+ * 두 구성값을 그대로 더하면 화면에 적힌 이익 마감률이 되도록 먼저 나눈 뒤 합을 쓴다 —
+ * "목표 도달 3.3% + 유리 마감 0.1%"인데 이익 마감률은 3.5%로 적히던 반올림 모순을 없앤다.
+ */
+export function greenRatePct(pTarget: number, pGreen: number): GreenPct {
+  const extra = Math.max(0, pGreen - pTarget);
+  const share = pGreen > 0 ? [pTarget / pGreen, extra / pGreen] : [0, 0];
+  const { parts, digits } = splitPctParts(share, pGreen);
+  const [a, b] = parts;
+  return {
+    total: fmtPctParts(a + b, digits),
+    target: fmtPctParts(a, digits),
+    extra: fmtPctParts(b, digits),
+  };
 }
 
 /**
@@ -193,18 +271,46 @@ export interface EasySummaryResult {
   level: TrafficLevel;
   badge: string;
   lines: [string, string, string];
+  /** 계산 수량이 0주일 때 붙이는 안내 — 금액이 아니라 가격 움직임만 본 판정임을 밝힌다 */
+  note?: string;
 }
 
-/** 1줄: 100번 중 목표·손절·미도달 횟수 (전문 용어 없이) */
-export function easyLine1(input: Pick<EasySummaryInput["sim"], "pTarget" | "pStop" | "pNeither"> & {
-  side: Side;
-}): string {
-  const [t, s, n] = perHundred([input.pTarget, input.pStop, input.pNeither]);
-  const targetWord = input.side === "buy" ? "올라서" : "내려가서";
-  const stopWord = input.side === "buy" ? "내려가서" : "올라가서";
+/** 계산 수량 0주(무포지션)에서 판정의 성격을 밝히는 한 줄 */
+export const ZERO_SHARES_NOTE =
+  "계산 수량이 0주라 이 조건에서는 매매가 한 번도 실행되지 않아요. 위 판정은 금액이 아니라 손절폭 대비 평균 움직임(1회 평균 R)만 본 값이에요.";
+
+/** 시뮬레이터 5초 요약 배너용 0주 안내 */
+export const ZERO_SHARES_BANNER_NOTE =
+  "계산 수량이 0주라 실제 매매는 일어나지 않아요 — 위 확률·평균은 가격 움직임만 본 값이에요";
+
+/**
+ * 1줄: 목표·손절·미도달 횟수 (전문 용어 없이).
+ *
+ * v2.2.4 — 100번 기준으로 나누면 목표 0.4%처럼 드문 경우가 0번이 되어, 1만 번 중 40번 있었던 일을
+ * "목표 가격까지 간 경우는 없었고"라고 말하는 모순이 있었다. 100번 기준에서 0이 되지만 실제로
+ * 일어난 비율이 하나라도 있으면 그 줄 전체를 실제 재생 횟수(1만 번) 기준으로 적는다.
+ */
+export function easyLine1(
+  input: Pick<EasySummaryInput["sim"], "pTarget" | "pStop" | "pNeither"> & {
+    side: Side;
+    /** 재생 횟수 — 100번 기준에서 0번이 되는 드문 결과를 숨기지 않기 위해 */
+    replays?: number;
+  }
+): string {
+  const { pTarget, pStop, pNeither, side } = input;
+  const replays = Math.max(1, Math.round(input.replays ?? 10000));
+  const targetWord = side === "buy" ? "올라서" : "내려가서";
+  const stopWord = side === "buy" ? "내려가서" : "올라가서";
+  const ps = [pTarget, pStop, pNeither];
+  const byHundred = perBase(ps, 100);
+  const tooSmallForHundred = ps.some((p, i) => p > 0 && byHundred[i] === 0);
+  const base = tooSmallForHundred ? replays : 100;
+  const [t, s, n] = tooSmallForHundred ? perBase(ps, base) : byHundred;
+  const basisText =
+    base === 100 ? "100번" : base >= 10000 ? "1만 번" : `${base.toLocaleString("ko-KR")}번`;
   let out =
     t > 0
-      ? `100번 해보면 약 ${t}번은 목표 가격까지 ${targetWord} 기분 좋게 끝났고, `
+      ? `${basisText} 해보면 약 ${t}번은 목표 가격까지 ${targetWord} 기분 좋게 끝났고, `
       : "목표 가격까지 간 경우는 없었고, ";
   out +=
     s > 0
@@ -242,7 +348,21 @@ export function easyLine2(input: {
   )}씩 ${flow} 흐름이었어요.${caution}`;
 }
 
-/** 3줄: 결과에 맞춰 달라지는 결론 (방향·손절폭·목표 배수 반영) */
+/** 목표·손절 중 어느 쪽에 더 많이 닿았는지 — 같은 횟수나 0회를 '더 많다'고 말하지 않기 위한 구분 */
+export type ReplayDirection = "stop" | "target" | "tie" | "bothZero";
+
+export function replayDirection(pTarget: number, pStop: number): ReplayDirection {
+  const tie = Math.abs(pTarget - pStop) < 1e-12;
+  if (tie) return pTarget > 0 ? "tie" : "bothZero";
+  return pStop > pTarget ? "stop" : "target";
+}
+
+/**
+ * 3줄: 결과에 맞춰 달라지는 결론 (방향·손절폭·목표 배수 반영).
+ *
+ * v2.2.4 — 목표·손절 횟수가 같거나 둘 다 0회(전부 미도달)인데도 "목표에 먼저 닿는 경우가 더
+ * 많았어요"라고 말하던 모순을 없앴다. 어느 쪽도 더 많지 않으면 그 사실을 그대로 적는다.
+ */
 export function easyConclusion(input: {
   avgR: number;
   pTarget: number;
@@ -255,25 +375,50 @@ export function easyConclusion(input: {
   extreme?: boolean;
 }): string {
   const { avgR, pTarget, pStop, ratio, rr, sessions, replays, extreme } = input;
-  const stopFirst = pStop > pTarget;
+  const dir = replayDirection(pTarget, pStop);
+  /** 어느 쪽도 닿지 않은 재생만 있었는지 / 한쪽으로만 끝났는지 */
+  const targetOnly = dir === "target" && pStop <= 0;
+  const stopOnly = dir === "stop" && pTarget <= 0;
+  const band: "tight" | "wide" | "even" =
+    ratio > 0 && ratio < 0.6 ? "tight" : ratio > 1.8 ? "wide" : "even";
+
+  const NARROW = "손절이 하루 흔들림보다 훨씬 좁";
+  const WIDE = "손절이 하루 흔들림보다 넓";
+  const EVEN = "하루 흔들림과 손절폭이 비슷하";
   let body: string;
-  if (ratio > 0 && ratio < 0.6) {
-    body = stopFirst
-      ? "손절을 하루 흔들림보다 훨씬 가까이 두면, 잠깐만 흔들려도 손절부터 걸리기 쉬워요."
-      : "손절이 하루 흔들림보다 훨씬 좁은데도, 이번 재생에서는 목표 쪽이 먼저 닿는 경우가 더 많았어요.";
-  } else if (ratio > 1.8) {
-    body = stopFirst
-      ? "손절이 하루 흔들림보다 넓어서 잠깐 흔들리는 정도로는 잘 안 걸리지만, 한 번 걸리면 잃는 돈이 커요."
-      : "손절이 하루 흔들림보다 넓어서 잠깐 흔들리는 정도로는 잘 안 걸렸고, 목표에 닿는 쪽이 더 많았어요.";
-  } else if (stopFirst) {
-    body = "하루 흔들림과 손절폭이 비슷해서, 조금만 반대로 움직여도 손절에 닿았어요.";
+  if (dir === "bothZero") {
+    body = `이번 재생에서는 목표에도 손절에도 닿지 않고 장이 끝난 경우만 있었어요.`;
+  } else if (dir === "tie") {
+    body = `이번 재생에서는 목표에 먼저 닿은 횟수와 손절에 먼저 닿은 횟수가 똑같았어요.`;
+  } else if (band === "tight") {
+    body = stopOnly
+      ? `${NARROW}아서, 이번 재생에서는 목표까지 가기 전에 손절로 끝난 경우만 있었어요.`
+      : targetOnly
+        ? `${NARROW}은데도, 이번 재생에서는 손절에 닿은 경우 없이 목표 쪽으로만 끝났어요.`
+        : dir === "stop"
+          ? "손절을 하루 흔들림보다 훨씬 가까이 두면, 잠깐만 흔들려도 손절부터 걸리기 쉬워요."
+          : `${NARROW}은데도, 이번 재생에서는 목표 쪽이 먼저 닿는 경우가 더 많았어요.`;
+  } else if (band === "wide") {
+    body = stopOnly
+      ? `${WIDE}은데도, 이번 재생에서는 목표까지 가지 못하고 손절로 끝난 경우만 있었어요.`
+      : targetOnly
+        ? `${WIDE}아서, 이번 재생에서는 손절에 닿은 경우 없이 목표 쪽으로만 끝났어요.`
+        : dir === "stop"
+          ? "손절이 하루 흔들림보다 넓어서 잠깐 흔들리는 정도로는 잘 안 걸리지만, 한 번 걸리면 잃는 돈이 커요."
+          : "손절이 하루 흔들림보다 넓어서 잠깐 흔들리는 정도로는 잘 안 걸렸고, 목표에 닿는 쪽이 더 많았어요.";
   } else {
-    body = "하루 흔들림과 손절폭이 비슷한데도 목표에 먼저 닿는 경우가 더 많았어요.";
+    body = stopOnly
+      ? `하루 흔들림과 손절폭이 비슷해서, 목표까지 가기 전에 손절로 끝난 경우만 있었어요.`
+      : targetOnly
+        ? `${EVEN}은데도, 이번 재생에서는 손절에 닿은 경우 없이 목표 쪽으로만 끝났어요.`
+        : dir === "stop"
+          ? "하루 흔들림과 손절폭이 비슷해서, 조금만 반대로 움직여도 손절에 닿았어요."
+          : `${EVEN}은데도 목표에 먼저 닿는 경우가 더 많았어요.`;
   }
 
   const tail =
     avgR < -FLAT_R
-      ? rr >= 1.5 && stopFirst
+      ? rr >= 1.5 && dir === "stop"
         ? ` 목표를 손절의 ${formatNumber(rr, 2)}배로 멀리 둬도 지는 판이 더 무거워서, 1번 평균은 손실 쪽이었어요.`
         : " 이기는 판보다 지는 판이 더 무거워서, 1번 평균은 손실 쪽이었어요."
       : avgR > FLAT_R
@@ -290,7 +435,13 @@ export function easyConclusion(input: {
 /** 쉬운 3줄 + 신호등을 한 번에 만든다 */
 export function easySummary(input: EasySummaryInput): EasySummaryResult {
   const lines: [string, string, string] = [
-    easyLine1({ pTarget: input.sim.pTarget, pStop: input.sim.pStop, pNeither: input.sim.pNeither, side: input.side }),
+    easyLine1({
+      pTarget: input.sim.pTarget,
+      pStop: input.sim.pStop,
+      pNeither: input.sim.pNeither,
+      side: input.side,
+      replays: input.sim.replays,
+    }),
     easyLine2({
       avgR: input.sim.avgR,
       oneR: input.oneR,
@@ -310,7 +461,12 @@ export function easySummary(input: EasySummaryInput): EasySummaryResult {
     }),
   ];
   const level = trafficLevel(input.sim.avgR, input.extreme === true);
-  return { level, badge: TRAFFIC_BADGES[level], lines };
+  return {
+    level,
+    badge: TRAFFIC_BADGES[level],
+    lines,
+    note: input.shares > 0 ? undefined : ZERO_SHARES_NOTE,
+  };
 }
 
 /** 접이식 '숫자·전문 산식 자세히 보기' — 정확한 비율·R 분해·1만 회 조건을 그대로 남긴다 */
@@ -321,14 +477,12 @@ export function easyMathDetail(input: {
 }): string[] {
   const { sim, oneR, unit } = input;
   const b = avgRBreakdown(sim);
-  const greenOnly = Math.max(0, sim.pGreen - sim.pTarget);
+  /** 배너·결과 카드와 같은 0.1% 단위 표기를 써서, 산식의 두 값 합이 위 이익 마감률과 정확히 맞게 한다 */
+  const p3 = pctThree(sim.pTarget, sim.pStop, sim.pNeither);
+  const green = greenRatePct(sim.pTarget, sim.pGreen);
   return [
-    `목표 도달 ${formatPct(sim.pTarget)} · 손절 도달 ${formatPct(sim.pStop)} · 장 마감 미도달 ${formatPct(
-      sim.pNeither
-    )} — 남은 봉 ${sim.barsLeft}개를 과거 봉 분포로 ${sim.replays.toLocaleString("ko-KR")}번 되감은 결과입니다.`,
-    `이익 마감률 ${formatPct(sim.pGreen)} = 목표 도달 ${formatPct(sim.pTarget)} + 목표 미도달 유리 마감 ${formatPct(
-      greenOnly
-    )}.`,
+    `목표 도달 ${p3.target} · 손절 도달 ${p3.stop} · 장 마감 미도달 ${p3.neither} — 남은 봉 ${sim.barsLeft}개를 과거 봉 분포로 ${sim.replays.toLocaleString("ko-KR")}번 되감은 결과입니다.`,
+    `이익 마감률 ${green.total} = 목표 도달 ${green.target} + 목표 미도달 유리 마감 ${green.extra}.`,
     `1회 평균 ${formatR(sim.avgR)} = 목표 ${formatR(sim.rAtTarget)}×${formatPct(sim.pTarget)} + 손절 −1R×${formatPct(
       sim.pStop
     )} = ${formatR(b.twoValueR)}${
@@ -401,12 +555,26 @@ export function easyAvgMultiple(avgR: number): string {
   return `평균 ${sign}${formatNumber(abs, 2)}배`;
 }
 
-/** 표 머리의 손절 행 이름 — 내 계획의 몇 배인지 */
+/** 표 머리의 손절 행 이름 — 내 계획의 몇 배인지 (호가 단위로 반올림된 실제 손절폭 기준) */
 export function easyStopLevelLabel(levelPct: number, basePct: number): string {
   if (!(basePct > 0)) return "손절폭";
   const mult = levelPct / basePct;
-  if (Math.abs(mult - 1) < 0.06) return "내 계획 그대로";
+  // v2.2.4 — 6% 차이까지 '내 계획 그대로'로 보아 1.05배를 1배처럼 읽히게 하던 폭을 0.5%로 좁힘
+  if (Math.abs(mult - 1) < 0.005) return "내 계획 그대로";
   return `내 계획의 ${formatNumber(mult, 1)}배`;
+}
+
+/**
+ * 조합표 열 이름 — 목표가가 손절폭의 몇 배 지점인지.
+ * v2.2.4 — 요청한 배수(1.5배 등)가 아니라 **화면에 적힌 목표가로 다시 계산한 실제 배수**를 적는다.
+ * (예: 진입 100,000 / 손절 99,999 → 1원 단위에서 1.5배는 100,001.5원이 될 수 없어 100,002원,
+ *  실제로는 2배가 된다. 이때 '목표 1.5배'라고 적으면 목표가와 표기가 서로 모순된다.)
+ */
+export function easyTargetMultiple(x: number): string {
+  if (!isFinite(x)) return "-";
+  if (Math.abs(x) >= 1000) return `${formatNumber(x, 0)}배`;
+  const text = x.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return `${text}배`;
 }
 
 /* ------------------------------------------------------------------ 수량 카드 */

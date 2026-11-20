@@ -24,6 +24,9 @@ await build({
   platform: "node",
   target: "node20",
   logLevel: "warning",
+  // react 를 번들에 넣으면 react-dom/server 와 React 인스턴스가 갈라져 훅(useState)이 깨진다.
+  // 두 패키지는 런타임에 node_modules 에서 같은 인스턴스를 쓰게 둔다.
+  external: ["react", "react-dom", "react-dom/server", "react/jsx-runtime"],
 });
 
 const result = spawnSync(
