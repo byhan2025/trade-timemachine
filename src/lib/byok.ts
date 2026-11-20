@@ -1,11 +1,12 @@
 import type { Bar, Dataset, Session } from "./types";
 
 /**
- * BYOK(Bring Your Own Key) — 방문자가 자기 무료 API 키로 5분봉을 직접 받아오는 경로 (v2.3.1).
+ * BYOK(Bring Your Own Key) — 방문자가 자기 무료 API 키로 5분봉을 직접 받아오는 경로 (v2.3.1 → v2.3.2).
  *
  * 원칙
  * 1. 키는 이 사이트 서버로 절대 보내지 않는다. 브라우저가 시세 제공처(api.twelvedata.com)에
- *    직접 요청하고, 키는 그 요청 URL 에만 붙는다.
+ *    직접 요청하고, 키는 그 요청의 `Authorization: apikey <키>` **헤더**로만 오간다(v2.3.2).
+ *    종전에는 `?apikey=` 쿼리로 붙여 URL·브라우저 기록·프록시 로그에 남을 수 있었다.
  * 2. 기본 보관은 메모리(새로 고침하면 사라짐). 방문자가 체크할 때만 이 브라우저
  *    localStorage 에 남긴다.
  * 3. 응답은 기존 내장 샘플과 같은 Dataset 모양으로 바꾼다(완전한 세션만 사용).
@@ -13,9 +14,14 @@ import type { Bar, Dataset, Session } from "./types";
  * 검증한 사실 (2026-11-20, 제공처 공식 문서·실응답)
  * - `GET https://api.twelvedata.com/time_series` 는 `access-control-allow-origin: *` 를 돌려주어
  *   브라우저에서 직접 부를 수 있다(Origin: https://byhan2025.github.io 로 확인).
+ * - **CORS preflight 가 `Authorization` 헤더를 허용한다** — `OPTIONS` + `Access-Control-Request-Headers:
+ *   authorization` 에 `204` 와 `access-control-allow-headers: Content-Type, Accept-Encoding,
+ *   Authorization, Accept, Origin, X-Requested-With, X-CSRF-TOKEN`, `access-control-allow-methods:
+ *   GET, OPTIONS` 를 돌려준다. 같은 헤더로 `Authorization: apikey demo` 를 붙인 GET 은 `200` + 값.
+ *   → 키를 쿼리스트링에서 떼어 헤더로 옮겨도 브라우저 fetch 가 막히지 않는다.
  * - `interval=5min`, `outputsize` 최대 5000. 5000봉이면 미국 정규장 78봉 × 64일 수준.
  * - 무료 Basic 플랜: 분당 8회·하루 800회, 시장 3곳(미국 주식·외환·암호화폐).
- *   → 무료 키로 한국(KRX) 종목 5분봉은 받을 수 없다. 한국은 HTS CSV 경로를 안내한다.
+ *   → 무료 키로 한국 종목 5분봉은 받을 수 없다. 한국은 HTS CSV 경로를 안내한다.
  * - 오류는 HTTP 상태와 본문 `code` 가 같은 값을 쓴다(401·403·429·404).
  */
 
@@ -88,14 +94,28 @@ export function looksKoreanTicker(symbol: string): boolean {
   return /^\d{6}(\.(KS|KQ|KRX))?$/.test(normalizeSymbol(symbol));
 }
 
-export function buildTimeSeriesUrl(symbol: string, apiKey: string, outputsize = BYOK_MAX_BARS): string {
+/** 요청 주소 — 키를 넣지 않는다(v2.3.2). 키는 아래 byokHeaders() 의 헤더로만 간다. */
+export function buildTimeSeriesUrl(symbol: string, outputsize = BYOK_MAX_BARS): string {
   const params = new URLSearchParams({
     symbol: normalizeSymbol(symbol),
     interval: "5min",
     outputsize: String(outputsize),
-    apikey: String(apiKey ?? "").trim(),
   });
   return `${TD_TIME_SERIES}?${params.toString()}`;
+}
+
+/** 제공처가 요구하는 키 인증 방식 접두어 */
+export const BYOK_AUTH_SCHEME = "apikey";
+
+/**
+ * 요청 헤더 — 키는 `Authorization` 헤더로만 담는다.
+ * URL·주소창·브라우저 기록·Referer 에 키가 남지 않는다.
+ */
+export function byokHeaders(apiKey: string): Record<string, string> {
+  return {
+    Accept: "application/json",
+    Authorization: `${BYOK_AUTH_SCHEME} ${String(apiKey ?? "").trim()}`,
+  };
 }
 
 /** 제공처 응답에서 키가 그대로 되돌아와도 화면·로그에 남기지 않는다 */

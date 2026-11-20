@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Dataset, SampleIndex, Side } from "./lib/types";
 import { buildPool } from "./lib/pool";
 import { simulate } from "./lib/simulate";
@@ -18,6 +19,7 @@ import { TopBar } from "./components/TopBar";
 import { ApiKeyPanel } from "./components/ApiKeyPanel";
 import { APP_VERSION } from "./lib/version";
 import { prefersReducedMotion, scrollBehavior } from "./lib/motion";
+import { toCsv } from "./lib/csv";
 
 const BASE = import.meta.env.BASE_URL || "/";
 const REPLAYS = 10000;
@@ -51,6 +53,13 @@ export default function App() {
   const [run, setRun] = useState<RunResult | null>(null);
   const [tab, setTab] = useState<Tab>("sim");
   const resultsRef = useRef<HTMLDivElement | null>(null);
+  /** 재생 뒤 키보드 포커스를 받을 결과 제목 영역 (v2.3.2) */
+  const resultHeadingRef = useRef<HTMLDivElement | null>(null);
+  /** 4단계 안내 [내 데이터 직접 입력으로 이동]이 열어 줄 입력칸 (v2.3.2) */
+  const customTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  /** 탭 로빙 tabIndex 용 (v2.3.2) */
+  const simTabRef = useRef<HTMLButtonElement | null>(null);
+  const reportTabRef = useRef<HTMLButtonElement | null>(null);
 
   const unit = dataset?.priceUnit ?? "";
 
@@ -146,19 +155,37 @@ export default function App() {
     applyCustom(text);
   };
 
-  const fillExample = () => {
-    if (!dataset) return;
-    const text = toCsv(dataset, 3);
-    setCustomText(text);
+  /**
+   * 형식 예시·내려받기에 쓸 데이터 — 지금 고른 데이터가 없으면(custom 선택 직후 등)
+   * 내장 샘플 첫 종목을 그때 받아 쓴다. v2.3.2: 예시 버튼이 어떤 상태에서든 동작한다.
+   */
+  const exampleDataset = async (): Promise<Dataset | null> => {
+    if (dataset) return dataset;
+    if (customDataset) return customDataset;
+    if (!sampleOptions.length) return null;
+    try {
+      const res = await fetch(`${BASE}samples/${sampleOptions[0].id}.json`);
+      if (res.ok) return (await res.json()) as Dataset;
+    } catch {
+      /* 아래에서 null */
+    }
+    return null;
   };
 
-  const downloadSampleCsv = () => {
-    if (!dataset) return;
-    const blob = new Blob([toCsv(dataset, 3)], { type: "text/csv;charset=utf-8" });
+  const fillExample = async () => {
+    const d = await exampleDataset();
+    if (!d) return;
+    setCustomText(toCsv(d, 3));
+  };
+
+  const downloadSampleCsv = async () => {
+    const d = await exampleDataset();
+    if (!d) return;
+    const blob = new Blob([toCsv(d, 3)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${dataset.symbol.replace(/[^\w.-]/g, "_")}-3days.csv`;
+    a.download = `${d.symbol.replace(/[^\w.-]/g, "_")}-3days.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -171,16 +198,35 @@ export default function App() {
       setDataset(customDataset);
       setDatasetId("custom");
       setCustomWarnings(customDataset ? customWarnings : []);
+      // v2.3.2 — 사용자 데이터로 돌아오면 그 데이터 기준 기본가로 다시 맞춘다(이전 종목 가격이 남지 않게)
+      if (customDataset) applyDefaults(customDataset);
       return;
     }
     if (next === "byok") {
       setDataset(byokDataset);
       setDatasetId("byok");
       setCustomWarnings([]);
+      if (byokDataset) applyDefaults(byokDataset);
       return;
     }
     setDatasetId(next);
   };
+
+  /** 4단계 가이드의 [내 데이터 직접 입력으로 이동] — 모드 전환 + 입력칸으로 스크롤·포커스 (v2.3.2) */
+  const openCustomEditor = useCallback(() => {
+    setRun(null);
+    setError(null);
+    setDataset(customDataset);
+    setDatasetId("custom");
+    setCustomWarnings(customDataset ? customWarnings : []);
+    if (customDataset) applyDefaults(customDataset);
+    window.setTimeout(() => {
+      const box = customTextareaRef.current;
+      if (!box) return;
+      box.scrollIntoView({ behavior: scrollBehavior(prefersReducedMotion()), block: "center" });
+      box.focus({ preventScroll: true });
+    }, 40);
+  }, [applyDefaults, customDataset, customWarnings]);
 
   /* ---------------------------------------------------------------- run */
   const num = (s: string) => {
@@ -265,13 +311,6 @@ export default function App() {
           warnings: customWarnings,
         });
         setTab("sim");
-        window.setTimeout(() => {
-          // 동작 줄이기(prefers-reduced-motion)를 켠 방문자는 애니메이션 없이 바로 이동 (v2.3.1)
-          resultsRef.current?.scrollIntoView({
-            behavior: scrollBehavior(prefersReducedMotion()),
-            block: "start",
-          });
-        }, 60);
       } catch (e) {
         setError(e instanceof Error ? e.message : "시뮬레이션에 실패했습니다.");
       } finally {
@@ -279,6 +318,23 @@ export default function App() {
       }
     }, 20);
   };
+
+  /**
+   * v2.3.2 — 재생이 끝나면 결과 제목으로 키보드 포커스를 옮기고 결과 섹션으로 스크롤한다.
+   * 포커스는 `preventScroll` 로 잡은 뒤 우리가 직접 스크롤해 위치가 튀지 않게 하고,
+   * 동작 줄이기(prefers-reduced-motion)를 켠 방문자는 애니메이션 없이 바로 이동한다(v2.3.1).
+   */
+  useEffect(() => {
+    if (!run) return;
+    const id = window.setTimeout(() => {
+      resultHeadingRef.current?.focus({ preventScroll: true });
+      resultsRef.current?.scrollIntoView({
+        behavior: scrollBehavior(prefersReducedMotion()),
+        block: "start",
+      });
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [run]);
 
   const applyRR = (r: number) => {
     const e = num(entry);
@@ -312,6 +368,24 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: scrollBehavior(prefersReducedMotion()) });
   };
 
+  /**
+   * v2.3.2 — WAI-ARIA Tabs 키보드 탐색: ArrowLeft/Right(처음↔끝 순환)·Home·End 로
+   * 탭을 고르고 포커스를 옮긴다. 선택은 포커스를 따라간다(automatic activation).
+   */
+  const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const key = event.key;
+    let next: Tab | null = null;
+    if (key === "ArrowRight" || key === "ArrowDown") next = tab === "sim" ? "report" : "sim";
+    else if (key === "ArrowLeft" || key === "ArrowUp") next = tab === "sim" ? "report" : "sim";
+    else if (key === "Home") next = "sim";
+    else if (key === "End") next = "report";
+    if (!next) return;
+    event.preventDefault();
+    if (next === "report") openReport();
+    else setTab("sim");
+    (next === "sim" ? simTabRef.current : reportTabRef.current)?.focus();
+  };
+
   const remaining = dataset ? dataset.times.length - 1 - entryBar : 0;
   const currentSignature = dataset
     ? signatureOf(dataset.id, side, num(entry), num(stop), num(target), entryBar, num(account), num(riskPct))
@@ -334,15 +408,18 @@ export default function App() {
         단순 통계 시뮬레이션이며, 미래 수익을 보장하지 않습니다. 원금 손실 가능.
       </div>
 
-      <div className="tabs" role="tablist" aria-label="화면 선택">
+      <div className="tabs" role="tablist" aria-label="화면 선택" aria-orientation="horizontal">
         <button
           type="button"
           role="tab"
           id="tab-sim"
+          ref={simTabRef}
+          tabIndex={tab === "sim" ? 0 : -1}
           aria-selected={tab === "sim"}
           aria-controls="panel-sim"
           className={tab === "sim" ? "tab active" : "tab"}
           onClick={() => setTab("sim")}
+          onKeyDown={onTabKeyDown}
           data-testid="tab-sim"
         >
           1. 시뮬레이터
@@ -351,10 +428,13 @@ export default function App() {
           type="button"
           role="tab"
           id="tab-report"
+          ref={reportTabRef}
+          tabIndex={tab === "report" ? 0 : -1}
           aria-selected={tab === "report"}
           aria-controls="panel-report"
           className={tab === "report" ? "tab active" : "tab"}
           onClick={openReport}
+          onKeyDown={onTabKeyDown}
           data-testid="tab-report"
         >
           2. 최종 해석 리포트
@@ -409,7 +489,7 @@ export default function App() {
               </p>
             )}
 
-            <ApiKeyPanel onApply={applyByok} />
+            <ApiKeyPanel onApply={applyByok} onRequestCustom={openCustomEditor} />
 
             {datasetId === "custom" && (
               <div className="custom-box">
@@ -431,6 +511,7 @@ export default function App() {
                 </div>
                 <textarea
                   className="control textarea"
+                  ref={customTextareaRef}
                   placeholder={"시각,시가,고가,저가,종가,거래량\n2026-11-18 09:00,71500,71800,71300,71600,120345\n2026-11-18 09:05,71600,71900,71400,71750,98411"}
                   value={customText}
                   onChange={(e) => setCustomText(e.target.value)}
@@ -654,7 +735,14 @@ export default function App() {
                     입력이 바뀌었습니다. 아래 결과는 이전 입력 기준입니다. 다시 실행해 주세요.
                   </p>
                 )}
-                <div className="run-head">
+                <div
+                  className="run-head"
+                  ref={resultHeadingRef}
+                  tabIndex={-1}
+                  role="region"
+                  aria-label="재생 결과"
+                  data-testid="result-heading"
+                >
                   <span className="badge strong">
                     {run.dataset.name} · {run.plan.side === "buy" ? "매수" : "매도"} ·{" "}
                     {run.dataset.times[run.plan.entryBar]} 진입
@@ -806,15 +894,4 @@ function signatureOf(
   riskPct: number
 ): string {
   return [id, side, entry, stop, target, entryBar, account, riskPct].join("|");
-}
-
-/** 내장 데이터의 마지막 n일을 CSV로 (형식 예시 / 내려받기) */
-function toCsv(d: Dataset, n: number): string {
-  const lines = ["시각,시가,고가,저가,종가,거래량"];
-  for (const s of d.sessions.slice(-n)) {
-    s.bars.forEach((b, i) => {
-      lines.push([`${s.date} ${d.times[i]}`, b[0], b[1], b[2], b[3], b[4] ?? 0].join(","));
-    });
-  }
-  return lines.join("\n");
 }

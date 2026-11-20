@@ -1,7 +1,7 @@
 {
   "name": "trade-timemachine",
   "private": true,
-  "version": "2.3.1",
+  "version": "2.3.2",
   "type": "module",
   "description": "한국형 타임머신 시뮬레이터 - 1만 번 모의 재생 + 가상 체험 5분봉·내 CSV·내 API 키 (투자 권유 아님)",
   "scripts": {

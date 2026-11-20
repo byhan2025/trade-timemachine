@@ -95,12 +95,14 @@ export { APP_VERSION, VERSION_SHORT, VERSION_NOTE } from "../src/lib/version";
 export {
   BYOK_MAX_BARS,
   BYOK_MIN_SESSIONS,
+  BYOK_AUTH_SCHEME,
   BYOK_STORAGE_KEY,
   ByokError,
   TD_KEYS_URL,
   TD_REGISTER_URL,
   TD_TIME_SERIES,
   buildTimeSeriesUrl,
+  byokHeaders,
   clearStoredKey,
   datasetFromTwelveData,
   errorFromResponse,
@@ -113,6 +115,7 @@ export {
   sessionGrid,
   unitForCurrency,
 } from "../src/lib/byok";
+export { csvCell, csvRow, toCsv, CSV_HEADER } from "../src/lib/csv";
 export { prefersReducedMotion, scrollBehavior } from "../src/lib/motion";
 export { ResultCards } from "../src/components/ResultCards";
 export { SizingCard, isExtremeStop } from "../src/components/SizingCard";

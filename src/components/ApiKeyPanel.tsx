@@ -6,6 +6,7 @@ import {
   TD_KEYS_URL,
   TD_REGISTER_URL,
   buildTimeSeriesUrl,
+  byokHeaders,
   clearStoredKey,
   datasetFromTwelveData,
   errorFromResponse,
@@ -20,9 +21,11 @@ import {
 } from "../lib/byok";
 
 /**
- * 방문자 본인 무료 API 키(BYOK) 입력 + 초보자용 4단계 가이드 — v2.3.1.
+ * 방문자 본인 무료 API 키(BYOK) 입력 + 초보자용 4단계 가이드 — v2.3.1 / v2.3.2.
  *
  * - 키는 이 사이트 서버로 보내지 않는다. 브라우저가 api.twelvedata.com 에 직접 요청한다.
+ * - v2.3.2: 키를 URL 쿼리에서 떼어 `Authorization: apikey <키>` 헤더로만 보낸다.
+ *   (제공처 preflight 가 Authorization 을 허용하는 것을 2026-11-20 실측 확인) + `referrerPolicy: no-referrer`.
  * - 기본은 메모리 보관, 방문자가 스위치를 켤 때만 이 브라우저 localStorage 에 남긴다.
  * - 가이드는 'API 키가 뭔지 모르는 사람' 기준으로 1→4단계를 순서대로 적는다.
  */
@@ -36,7 +39,14 @@ function browserStore(): KeyStore | null {
   }
 }
 
-export function ApiKeyPanel({ onApply }: { onApply: (d: Dataset) => void }) {
+export function ApiKeyPanel({
+  onApply,
+  onRequestCustom,
+}: {
+  onApply: (d: Dataset) => void;
+  /** 4단계 안내에서 [내 데이터 직접 입력]으로 바로 이동(v2.3.2) */
+  onRequestCustom?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [symbol, setSymbol] = useState("");
@@ -89,9 +99,11 @@ export function ApiKeyPanel({ onApply }: { onApply: (d: Dataset) => void }) {
     const controller = new AbortController();
     timer.current = window.setTimeout(() => controller.abort(), 20000);
     try {
-      const res = await fetch(buildTimeSeriesUrl(sym, key, BYOK_MAX_BARS), {
+      const res = await fetch(buildTimeSeriesUrl(sym, BYOK_MAX_BARS), {
         signal: controller.signal,
-        headers: { Accept: "application/json" },
+        // v2.3.2 — 키는 헤더로만. URL·Referer 어디에도 남기지 않는다.
+        headers: byokHeaders(key),
+        referrerPolicy: "no-referrer",
       });
       const body = (await res.json().catch(() => null)) as TdResponse | null;
       if (!res.ok) throw errorFromResponse(res.status, body);
@@ -150,6 +162,10 @@ export function ApiKeyPanel({ onApply }: { onApply: (d: Dataset) => void }) {
             API 키는 <strong>내가 받은 데이터를 나만 볼 수 있게 해 주는 비밀 열쇠</strong>예요. 이 앱은
             키를 받아 두는 서버가 없어서, <strong>내 브라우저가 시세 사이트에 직접 물어봅니다.</strong>{" "}
             키는 우리 사이트로 오지 않아요. 아래 4단계만 따라 하면 됩니다.
+          </p>
+          <p className="byok-intro small">
+            키는 요청 주소(URL)에 붙지 않고 <strong>요청 헤더(Authorization)</strong>에만 담겨 시세
+            사이트로 갑니다. 주소창·브라우저 방문 기록·다른 사이트로 넘기는 Referer 에 키가 남지 않아요.
           </p>
 
           <ol className="byok-guide">
@@ -231,6 +247,16 @@ export function ApiKeyPanel({ onApply }: { onApply: (d: Dataset) => void }) {
                   선택]으로 올리거나 붙여넣은 뒤 <strong>[이 데이터로 적용]</strong>을 누릅니다.
                 </li>
               </ol>
+              {onRequestCustom && (
+                <button
+                  type="button"
+                  className="btn secondary byok-goto-custom"
+                  onClick={onRequestCustom}
+                  data-testid="byok-goto-custom"
+                >
+                  내 데이터 직접 입력으로 이동
+                </button>
+              )}
             </li>
           </ol>
 
@@ -321,8 +347,9 @@ export function ApiKeyPanel({ onApply }: { onApply: (d: Dataset) => void }) {
             <span className="remember-knob" aria-hidden="true" />
           </button>
           <p className="footnote byok-privacy" data-testid="byok-privacy">
-            키는 <strong>우리 서버로 전송되지 않습니다.</strong> 저장을 켜지 않으면 이 화면을 닫거나 새로
-            고침할 때 사라지고, 켜면 이 브라우저에만 남습니다(같은 브라우저를 쓰는 사람은 볼 수 있어요).
+            키는 <strong>우리 서버로 전송되지 않습니다.</strong> 요청 주소에도 붙지 않고 헤더로만
+            시세 사이트에 전달됩니다. 저장을 켜지 않으면 이 화면을 닫거나 새로 고침할 때 사라지고,
+            켜면 이 브라우저에만 남습니다(같은 브라우저를 쓰는 사람은 볼 수 있어요).
             불러온 데이터는 화면 계산에만 쓰고 저장·재배포하지 않습니다.
           </p>
         </div>

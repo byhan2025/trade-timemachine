@@ -619,6 +619,17 @@ a {
   padding: 0 2px;
 }
 
+/* v2.3.2 — 재생 뒤 키보드 포커스를 받는 결과 제목 영역. 포커스가 보이도록 테두리 */
+.run-head:focus {
+  outline: 3px solid rgba(29, 78, 216, 0.45);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+.run-head:focus:not(:focus-visible) {
+  outline-color: rgba(29, 78, 216, 0.3);
+}
+
 .result-block {
   min-width: 0;
 }
@@ -2344,6 +2355,12 @@ a:focus-visible {
 
 .byok-substeps li {
   margin-bottom: 4px;
+}
+
+/* v2.3.2 — 4단계 안내에서 [내 데이터 직접 입력]으로 바로 가는 버튼 */
+.byok-goto-custom {
+  margin: 8px 0 0;
+  min-height: 44px;
 }
 
 .byok-form {

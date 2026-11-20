@@ -1,4 +1,4 @@
-# 한국형 타임머신 시뮬레이터 (v2.3.1)
+# 한국형 타임머신 시뮬레이터 (v2.3.2)
 
 계획한 진입가·손절가·목표가를 **과거 실제 봉 데이터의 수익률 분포로 10,000번 다시 걸어보는** 독립 웹앱입니다.
 2단계에서 **실시간 5분봉 검색 UI**와 **GitHub Pages 공개 배포**, **Supabase Edge Function `stock-bars` 중계 서버**를 붙였고(실시간 검색은 v2.3.0에서 화면에서 제외 — 아래 「실시간 검색을 뺀 이유」),
@@ -50,6 +50,19 @@ v2.3.0은 사용자 지시 두 가지를 반영했습니다 — **①깨진 모�
 **②실시간 종목 검색 제외**: `stock-bars` 중계 호출과 `서버 토큰 연동 대기 중` 배지를 화면에서 없애 **네트워크 요청 0건**(앱은 시세 서버를 전혀 부르지 않음)으로 만들고,
 입력 경로를 **내장 종목 + CSV/JSON 업로드**로 정리했습니다.
 
+v2.3.2는 텔레그램 회의실 4호 봇이 v2.3.1(85/100)에서 지적한 5건을 고쳤습니다 —
+**①BYOK 키 전송 보안**: Twelve Data CORS preflight 가 `Authorization` 헤더를 허용하는 것을 실측(어 `OPTIONS` 204 +
+`access-control-allow-headers: … Authorization …`, 같은 헤더로 `apikey demo` GET 200)해 **키를 URL 쿼리(`?apikey=`)에서 떼어
+`Authorization: apikey <키>` 헤더로 옮기고** `referrerPolicy: "no-referrer"` + `<meta name="referrer" content="no-referrer">`로
+주소·방문 기록·Referer 에 키가 남지 않게 했습니다.
+**②CSV 내보내기 이스케이프**: 모든 칸에 RFC 4180 규칙(쉼표·큰따옴표·줄바꿈이면 큰따옴표로 감싸고 `"` → `""`)과
+수식 인젝션 방어(`=`, `+`, `-`, `@` 선두면 `'` 부착, `-1000`·`+1.5` 처럼 숫자인 값은 제외)를 적용했습니다(`src/lib/csv.ts`).
+**③custom 모드 전환**: 4단계 안내에 **[내 데이터 직접 입력으로 이동]** 버튼을 넣어 어떤 상태에서든 입력칸이 열리고 포커스를 받으며,
+사용자 데이터로 돌아올 때 그 데이터 기준 기본가로 다시 맞춥니다.
+**④결과 포커스**: 1만 번 재생이 끝나면 결과 제목(`role="region"`, `tabIndex=-1`)으로 키보드 포커스를 옮겨(`focus({preventScroll:true})`)
+스크린리더·키보드 사용자가 바로 결과를 읽습니다.
+**⑤탭 키보드 탐색**: `role="tablist"` 에 `ArrowLeft/Right`(순환)·`Home`·`End` 와 로빙 `tabIndex` 를 넣었습니다.
+
 투자 권유·매매 신호가 아니며, 미래 수익을 보장하지 않습니다. 개인 연구·참고용 **비상업** 통계 도구입니다.
 
 - 라이브: <https://byhan2025.github.io/trade-timemachine/>
@@ -67,22 +80,25 @@ npm run build:pages  # GitHub Pages 서브패스 빌드 -> dist/ (base "/trade-t
 npm run preview      # dist 미리보기 (127.0.0.1:4180)
 npm run deploy:pages # build:pages + dist/ 를 gh-pages 브랜치로 푸시
 npm run samples      # 가상 체험 5분봉 5종 재생성 (고정 시드)
-npm test             # 프론트엔드 단위 테스트 107개 (esbuild 번들 + node --test, 추가 설치 없음)
+npm test             # 프론트엔드 단위 테스트 113개 (esbuild 번들 + node --test, 추가 설치 없음)
 ```
 
-## 본인 API 키로 5분봉 불러오기 — BYOK (v2.3.1)
+## 본인 API 키로 5분봉 불러오기 — BYOK (v2.3.1 · 키 전송 v2.3.2)
 
 사용자 지시(“2안으로 하되 사용방법을 하나하나 가이드해주는걸 넣어줄수있어?”)에 따라,
 **방문자가 자기 무료 API 키를 넣어 5분봉을 직접 받아오는 길**을 열었습니다. 중계 서버는 없습니다 —
-방문자 브라우저가 시세 제공처에 **직접** 요청하고, 키는 그 요청에만 붙습니다.
+방문자 브라우저가 시세 제공처에 **직접** 요청하고, 키는 그 요청의 **헤더에만** 붙습니다.
 
 | 화면 순서 | 방문자가 하는 일 | 확인된 사실 (2026-11-20, 공식 문서·실응답) |
 | --- | --- | --- |
 | 1단계 | [Twelve Data 무료 가입](https://twelvedata.com/register) 새 탭 열기 | Basic 플랜 **월 $0**, **1분 8회·하루 800회**, 열린 시장 **3곳(미국 주식·ETF·외환·암호화폐)** |
 | 2단계 | [My API Keys](https://twelvedata.com/account/api-keys)에서 키 복사 | 키는 계정 화면에서 발급·재발급 |
-| 3단계 | 키·티커를 넣고 **[데이터 불러오기]** | `GET https://api.twelvedata.com/time_series?interval=5min&outputsize=5000` — `access-control-allow-origin: *` 라 브라우저 직접 호출 가능(Origin `https://byhan2025.github.io`로 확인). 데모 키로 AAPL 5,000봉 = **78봉 × 64일** 수신 확인 |
-| 4단계 | 한국 종목은 증권사 HTS 5분봉 CSV | 무료 플랜 3개 시장에 **KRX가 없어** 한국 5분봉은 유료 플랜이 필요 — 대신 HTS CSV를 그대로 올리면 같은 계산 |
+| 3단계 | 키·티커를 넣고 **[데이터 불러오기]** | `GET https://api.twelvedata.com/time_series?interval=5min&outputsize=5000` + `Authorization: apikey <키>` — `access-control-allow-origin: *` 이고 preflight 가 `Authorization` 을 허용해(`OPTIONS` 204) 브라우저 직접 호출이 된다. 데모 키로 AAPL 5,000봉 = **78봉 × 64일** 수신 확인 |
+| 4단계 | 한국 종목은 증권사 HTS 5분봉 CSV | 무료 플랜 3개 시장에 **KRX가 없어** 한국 5분봉은 유료 플랜이 필요 — 대신 HTS CSV를 그대로 올리면 같은 계산. 이 단계에서 **[내 데이터 직접 입력으로 이동]** 버튼으로 입력칸을 바로 연다 |
 
+- **키가 가는 곳(v2.3.2)**: 키는 `Authorization: apikey <키>` **요청 헤더**로만 시세 제공처에 갑니다.
+  URL·주소창·방문 기록·Referer 에 남지 않도록 `referrerPolicy: "no-referrer"` 와 `index.html` 의
+  `<meta name="referrer" content="no-referrer">` 를 함께 적용했습니다.
 - **키 보관**: 기본은 메모리(새로 고침하면 사라짐). 화면의 스위치를 켤 때만 이 브라우저 `localStorage`
   (`ttm.byok.twelvedata.key.v1`)에 남기고, 스위치를 끄면 즉시 지웁니다. 사이트 서버로는 키도 데이터도 가지 않습니다.
 - **오류 안내**: 잘못된 키(401) · 이 플랜에서 못 여는 종목(403, 한국 종목 포함) · 분당/일일 한도(429) ·
@@ -138,10 +154,16 @@ Yahoo에서 받아 두었던 실제 5분봉 5종과 수집 스크립트(`scripts
 **유료 애드온·별도 서면 계약**이 조건입니다. 그래서 내장 데이터는 가상 생성으로 바꾸고, 실제 시세는
 **방문자 본인 키(BYOK)** 또는 **본인 CSV**로만 다루도록 했습니다.
 
-## 화면 보조 기능 (v2.3.1)
+## 화면 보조 기능 (v2.3.2)
 
 - **동작 줄이기**: 기기에서 `prefers-reduced-motion: reduce` 를 켜면 결과로 이동할 때 부드러운 스크롤 대신
   애니메이션 없이 바로 이동합니다(시뮬레이션 후·리포트 열기 두 곳).
+- **결과 포커스(v2.3.2)**: `[1만 번 모의 재생 실행]` 이 끝나면 결과 제목 영역(`role="region"`, `tabIndex=-1`)으로
+  키보드 포커스를 옮기고(`focus({ preventScroll: true })`) 그 자리로 스크롤합니다.
+- **탭 키보드 탐색(v2.3.2)**: `role="tablist"` 에서 `ArrowLeft`/`ArrowRight`(처음↔끝 순환)·`Home`·`End` 로
+  탭을 고르고 포커스를 옮깁니다(로빙 `tabIndex`, 선택은 포커스를 따라감).
+- **CSV 내보내기(v2.3.2)**: 모든 칸을 RFC 4180 으로 감싸고(쉼표·큰따옴표·줄바꿈) `=`,`+`,`-`,`@` 선두는
+  수식 인젝션을 막습니다(숫자인 `-1000`·`+1.5` 는 그대로). 내려받은 파일을 그대로 다시 붙여넣어도 같은 데이터입니다.
 - **메타 설명**: `index.html` 의 `description`·`og:description` 에서 “실시간 5분봉”을 빼고, 가상 체험·내 CSV·
   내 API 키라는 실제 기능으로 적었습니다.
 - **정리**: 화면에서 쓰지 않던 `StockSearch.tsx`·`stockApi.ts`·`supabase/functions/stock-bars/` 를 삭제했습니다.
@@ -230,7 +252,8 @@ v2.1.3에서는 각주에 **포지션 방향과 실제 사용한 평균 R**을 �
 `내 데이터 직접 입력` 을 고르고 아직 [적용하기]를 누르지 않았으면 이전 종목으로 계산하지 않고
 실행 버튼을 잠그며 `먼저 차트 데이터를 입력하고 [적용하기]를 눌러주세요` 를 표시합니다.
 CSV/JSON은 브라우저 안에서만 처리되고 외부로 전송되지 않습니다. v2.3.1부터는 방문자가 **자기 API 키**를 넣은 경우에만
-브라우저가 시세 제공처(`api.twelvedata.com`)에 직접 요청하며, 그때도 키·데이터는 이 사이트 서버로 가지 않습니다.
+브라우저가 시세 제공처(`api.twelvedata.com`)에 직접 요청하며, v2.3.2부터 그 키는 **요청 헤더(Authorization)로만** 오갑니다
+(URL·Referer·방문 기록에 남지 않음). 그때도 키·데이터는 이 사이트 서버로 가지 않습니다.
 
 ## 배포
 
@@ -240,6 +263,7 @@ CSV/JSON은 브라우저 안에서만 처리되고 외부로 전송되지 않습
 
 ## 검증 리포트
 
+- `reports/trade-timemachine/v2.3.2/` — v2.3.2(BYOK 키 `Authorization` 헤더 전송·`referrerPolicy`/meta referrer·CSV RFC 4180 이스케이프+수식 인젝션 방어·4단계→custom 이동 버튼·결과 포커스·탭 화살표/Home/End 키보드 탐색·단위 테스트 113개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v2.3.1/` — v2.3.1(본인 API 키 BYOK 4단계 가이드·가상 체험 5종 내장·Yahoo 원시 파일/중계 코드 삭제·메타 설명 정정·prefers-reduced-motion·단위 테스트 107개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v2.3.0/` — v2.3.0(모바일 헤더 복구(390/360 제목 1줄)·실시간 검색 제외(`stock-bars` 요청 0건)·100종목 미내장 사유와 약관 근거·단위 테스트 94개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v1/` — 1단계(엔진·파리티·Playwright)

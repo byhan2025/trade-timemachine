@@ -89,12 +89,14 @@ import {
   TopBar,
   BYOK_MAX_BARS,
   BYOK_MIN_SESSIONS,
+  BYOK_AUTH_SCHEME,
   BYOK_STORAGE_KEY,
   ByokError,
   TD_KEYS_URL,
   TD_REGISTER_URL,
   TD_TIME_SERIES,
   buildTimeSeriesUrl,
+  byokHeaders,
   clearStoredKey,
   datasetFromTwelveData,
   errorFromResponse,
@@ -108,6 +110,10 @@ import {
   unitForCurrency,
   scrollBehavior,
   prefersReducedMotion,
+  csvCell,
+  csvRow,
+  toCsv,
+  CSV_HEADER,
 } from "./.build/lib.mjs";
 
 /* ---------------------------------------------------------------- helpers */
@@ -2007,17 +2013,17 @@ test("v2.2.4 배선: 배너·결과 카드·리포트가 같은 퍼센트 표기
   assert.match(combo, /실제 \{easyTargetMultiple\(cell\.actualR\)\}/);
 });
 
-test("v2.3.1 버전 표기: package.json·version.ts·배지·푸터·README 가 같은 버전을 가리킨다", () => {
+test("v2.3.2 버전 표기: package.json·version.ts·배지·푸터·README 가 같은 버전을 가리킨다", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(pkg.version, APP_VERSION);
-  assert.equal(APP_VERSION, "2.3.1");
+  assert.equal(APP_VERSION, "2.3.2");
   // 배지는 짧은 v2.3 만 (긴 설명은 title 속성으로)
   assert.equal(VERSION_SHORT, "2.3");
   const app = readFileSync("src/App.tsx", "utf8");
   assert.match(app, /한국형 타임머신 시뮬레이터 v\{APP_VERSION\}/);
   assert.match(app, /import \{ APP_VERSION \} from "\.\/lib\/version"/);
   const readme = readFileSync("README.md", "utf8");
-  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.3\.1\)/);
+  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.3\.2\)/);
 });
 
 /* ================================================================ v2.3.0 모바일 헤더 복구 · 실시간 검색 제외 */
@@ -2355,14 +2361,21 @@ function kindOf(fn) {
   }
 }
 
-test("v2.3.1 BYOK ①: 요청 URL 은 5분봉·내 키·최대 5000봉이고 티커는 정리된다", () => {
-  const url = buildTimeSeriesUrl(" aapl ", " KEY123 ");
+test("v2.3.2 BYOK ①: 요청 URL 은 5분봉·최대 5000봉이고 키는 URL 에 없다(헤더로만)", () => {
+  const url = buildTimeSeriesUrl(" aapl ", BYOK_MAX_BARS);
   assert.ok(url.startsWith(TD_TIME_SERIES + "?"));
   assert.ok(url.includes("symbol=AAPL"));
   assert.ok(url.includes("interval=5min"));
   assert.ok(url.includes("outputsize=" + BYOK_MAX_BARS));
-  assert.ok(url.includes("apikey=KEY123"));
+  // v2.3.2 — 키가 쿼리·URL 어디에도 남지 않는다
+  assert.ok(!url.includes("apikey"), url);
+  assert.ok(!url.includes("KEY123"));
   assert.equal(BYOK_MAX_BARS, 5000);
+  // 키는 Authorization 헤더로만 — 제공처가 요구하는 `apikey <키>` 형식
+  const headers = byokHeaders(" KEY123 ");
+  assert.equal(headers.Authorization, "apikey KEY123");
+  assert.equal(headers.Accept, "application/json");
+  assert.equal(BYOK_AUTH_SCHEME, "apikey");
   // 무료 플랜 한도·가입 주소는 화면 가이드와 같은 값
   assert.ok(TD_REGISTER_URL.startsWith("https://twelvedata.com/"));
   assert.ok(TD_KEYS_URL.includes("api-keys"));
@@ -2488,8 +2501,8 @@ test("v2.3.1 접근성 ①: prefers-reduced-motion 이면 부드러운 스크롤
   assert.equal(scrollBehavior(true), "auto");
   assert.equal(scrollBehavior(false), "smooth");
   const app = readFileSync("src/App.tsx", "utf8");
-  // 결과로 이동하는 두 곳(시뮬레이션 후·리포트 열기) 모두 설정을 존중한다
-  assert.equal([...app.matchAll(/behavior: scrollBehavior\(prefersReducedMotion\(\)\)/g)].length, 2);
+  // 결과로 이동하는 세 곳(시뮬레이션 후·리포트 열기·v2.3.2 내 데이터 입력칸 열기) 모두 설정을 존중한다
+  assert.equal([...app.matchAll(/behavior: scrollBehavior\(prefersReducedMotion\(\)\)/g)].length, 3);
   assert.ok(!/behavior:\s*["']smooth["']/.test(app), "smooth 리터럴이 남아 있다");
   assert.match(readFileSync("src/lib/motion.ts", "utf8"), /prefers-reduced-motion: reduce/);
   assert.equal(typeof prefersReducedMotion(), "boolean");
@@ -2520,7 +2533,7 @@ test("v2.3.1 가이드 UI: 4단계 안내·키 보기/가리기·저장 스위�
 
 test("v2.3.1 앱 배선: 내 API 키 데이터가 선택 목록에 추가되고 가상 체험 고지가 화면에 있다", () => {
   const app = readFileSync("src/App.tsx", "utf8");
-  assert.ok(app.includes("<ApiKeyPanel onApply={applyByok} />"));
+  assert.ok(app.includes("<ApiKeyPanel onApply={applyByok} onRequestCustom={openCustomEditor} />"));
   assert.ok(app.includes('<option value="byok">'));
   assert.ok(app.includes('datasetId === "byok"'));
   assert.ok(app.includes('data-testid="synthetic-note"'));
@@ -2599,4 +2612,96 @@ test("v2.3.1 정리: 구버전 StockSearch·stockApi·stock-bars 중계 코드�
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.match(pkg.scripts.samples, /make_synthetic_samples\.py/);
   assert.equal(pkg.scripts["test:api"], undefined);
+});
+
+/* ================================================================ v2.3.2 보안(키 헤더)·CSV 이스케이프·포커스·탭 키보드 */
+
+test("v2.3.2 CSV ①: 쉼표·큰따옴표·줄바꿈은 RFC 4180 으로 감싸고 따옴표는 두 번 쓴다", () => {
+  assert.equal(csvCell("A,B"), '"A,B"');
+  assert.equal(csvCell('그는 "좋다"고 했다'), '"그는 ""좋다""고 했다"');
+  assert.equal(csvCell("두 줄\n입니다"), '"두 줄\n입니다"');
+  assert.equal(csvCell("CR\r포함"), '"CR\r포함"');
+  assert.equal(csvCell("평범한 값"), "평범한 값");
+  assert.equal(csvCell(71500), "71500");
+  assert.equal(csvCell(-3.5), "-3.5");
+  assert.equal(csvCell(null), "");
+  assert.equal(csvCell(undefined), "");
+  assert.equal(csvCell(NaN), "");
+  assert.equal(csvRow(["a", 1, "b,c"]), 'a,1,"b,c"');
+  assert.deepEqual([...CSV_HEADER], ["시각", "시가", "고가", "저가", "종가", "거래량"]);
+});
+
+test("v2.3.2 CSV ②: 수식 인젝션은 맨 앞 ' 로 막고, 음수·부호 있는 숫자는 그대로 둔다", () => {
+  for (const bad of ["=SUM(A1)", "+82", "-cmd|' /C calc'!A0", "@SUM(1)", "\t=1+1"]) {
+    assert.equal(csvCell(bad), "'" + bad, bad);
+  }
+  // 숫자로 읽히는 음수는 방어하지 않는다 — 수치 데이터의 음수가 망가지면 안 된다
+  assert.equal(csvCell(-1000), "-1000");
+  assert.equal(csvCell("-1000"), "-1000");
+  assert.equal(csvCell("-1.5e3"), "-1.5e3");
+  assert.equal(csvCell("0"), "0");
+  // '+' 는 엑셀이 82 라는 수식으로 읽으므로 숫자 모양이어도 막는다
+  assert.equal(csvCell("+1.5"), "'+1.5");
+  // 방어한 칸도 쉼표가 있으면 인용된다
+  assert.equal(csvCell("=A1,B1"), '"\'=A1,B1"');
+});
+
+test("v2.3.2 CSV ③: 내보낸 CSV는 머리글 1줄 + 마지막 n일 봉이고 그대로 다시 읽힌다", () => {
+  const { dataset } = parseCustom(csv(baseRows(4)));
+  const text = toCsv(dataset, 3);
+  const lines = text.split("\n");
+  assert.equal(lines[0], HEADER);
+  assert.equal(lines.length, 1 + 3 * 4);
+  // 모든 줄의 칸 수가 같다(열이 밀리지 않는다)
+  for (const line of lines) assert.equal(line.split(",").length, 6);
+  // 내려받은 파일을 그대로 다시 붙여넣어도 같은 데이터
+  const again = parseCustom(text).dataset;
+  assert.equal(again.sessions.length, 3);
+  assert.equal(again.times.length, 4);
+  assert.deepEqual(again.sessions, dataset.sessions.slice(-3));
+});
+
+test("v2.3.2 BYOK ⑧: 키는 Authorization 헤더로만 — 요청 주소·Referer 에 키가 남지 않는다", () => {
+  const panel = readFileSync("src/components/ApiKeyPanel.tsx", "utf8");
+  assert.match(panel, /fetch\(buildTimeSeriesUrl\(sym, BYOK_MAX_BARS\), \{/);
+  assert.match(panel, /headers: byokHeaders\(key\)/);
+  assert.match(panel, /referrerPolicy: "no-referrer"/);
+  assert.ok(!panel.includes("apikey="), "패널이 키를 쿼리로 보낸다");
+  assert.ok(panel.includes("요청 헤더(Authorization)"), "안내 문구가 헤더 전달을 설명하지 않는다");
+  // index.html 은 Referer 자체를 보내지 않는다
+  assert.match(readFileSync("index.html", "utf8"), /<meta name="referrer" content="no-referrer" \/>/);
+  // byok.ts 도 키를 URL 로 만들지 않는다
+  const byok = readFileSync("src/lib/byok.ts", "utf8");
+  assert.ok(!byok.includes("apikey: String"), "byok.ts 가 키를 쿼리 파라미터로 넣는다");
+});
+
+test("v2.3.2 앱 배선: 4단계 안내의 [내 데이터 직접 입력으로 이동]이 custom 입력칸을 연다", () => {
+  const panel = readFileSync("src/components/ApiKeyPanel.tsx", "utf8");
+  assert.ok(panel.includes('data-testid="byok-goto-custom"'));
+  assert.ok(panel.includes("내 데이터 직접 입력으로 이동"));
+  assert.ok(panel.includes("onRequestCustom?"));
+  const app = readFileSync("src/App.tsx", "utf8");
+  assert.ok(app.includes("onRequestCustom={openCustomEditor}"));
+  assert.match(app, /const openCustomEditor = useCallback\(/);
+  assert.ok(app.includes('setDatasetId("custom")'));
+  assert.ok(app.includes("customTextareaRef"));
+  // 사용자 데이터로 돌아오면 그 데이터 기준 기본가로 다시 맞춘다
+  assert.match(app, /if \(customDataset\) applyDefaults\(customDataset\)/);
+});
+
+test("v2.3.2 포커스·탭: 결과 제목 tabIndex -1 + preventScroll, 탭은 화살표·Home·End 로 이동", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  assert.ok(app.includes('data-testid="result-heading"'));
+  assert.ok(app.includes("tabIndex={-1}"));
+  assert.ok(app.includes('role="region"'));
+  assert.ok(app.includes('aria-label="재생 결과"'));
+  assert.match(app, /resultHeadingRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.ok(app.includes('aria-orientation="horizontal"'));
+  assert.match(app, /tabIndex=\{tab === "sim" \? 0 : -1\}/);
+  assert.match(app, /tabIndex=\{tab === "report" \? 0 : -1\}/);
+  for (const key of ["ArrowRight", "ArrowLeft", "Home", "End"]) {
+    assert.ok(app.includes(`"${key}"`), key);
+  }
+  assert.match(app, /onKeyDown=\{onTabKeyDown\}/);
+  assert.ok(readFileSync("src/styles.css", "utf8").includes(".run-head:focus"));
 });
