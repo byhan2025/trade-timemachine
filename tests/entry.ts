@@ -53,6 +53,9 @@ export {
 export {
   TRAFFIC_BADGES,
   TRAFFIC_BASIS,
+  trafficBasis,
+  calcRoundingStep,
+  calcRoundingNote,
   EXTREME_STOP_REASON,
   EXTREME_BANNER_NOTE,
   EXTREME_AVG_R_NOTE,

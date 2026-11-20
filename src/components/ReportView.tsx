@@ -11,7 +11,6 @@ import type { ComboMode } from "../lib/terms";
 import { EXTREME_STOP_RATIO } from "../lib/sizing";
 import {
   EXTREME_STOP_REASON,
-  TRAFFIC_BASIS,
   avgRTone,
   easyMathDetail,
   easyMoneyChip,
@@ -21,6 +20,7 @@ import {
   greenRatePct,
   pctThree,
   positiveTone,
+  trafficBasis,
 } from "../lib/easy";
 import { ThermometerView } from "./Thermometer";
 import { ComboTable } from "./ComboTable";
@@ -159,8 +159,8 @@ export function ReportView({ run, stale, onBack }: Props) {
         <p className="alert warn small" role="status" data-testid="extreme-stop-note">
           손절폭이 진입가의 0.01% 미만입니다 — 진입 {formatPrice(run.plan.entry, unit)} / 손절{" "}
           {formatPrice(run.plan.stop, unit)} = {formatPct(stopPct, 2)} (1주당 위험폭{" "}
-          {formatPrice(Math.abs(run.plan.entry - run.plan.stop), unit)}). 호가 단위·체결 오차만으로도
-          손절이 즉시 걸릴 수 있어, 아래 확률·수량·생존 그래프는 참고용으로만 보세요.
+          {formatPrice(Math.abs(run.plan.entry - run.plan.stop), unit)}). 실제 호가 단위(가격대별로 다름)·체결
+          오차만으로도 손절이 즉시 걸릴 수 있어, 아래 확률·수량·생존 그래프는 참고용으로만 보세요.
         </p>
       )}
 
@@ -180,8 +180,9 @@ export function ReportView({ run, stale, onBack }: Props) {
           <span className={`traffic ${easy.level}`} data-testid="traffic-badge">
             {easy.badge}
           </span>
-          <span className="traffic-basis">
-            {TRAFFIC_BASIS} · <strong data-testid="traffic-money">{moneyChip}</strong>
+          <span className="traffic-basis" data-testid="traffic-basis">
+            {trafficBasis(run.size.shares, run.plan.side)} ·{" "}
+            <strong data-testid="traffic-money">{moneyChip}</strong>
           </span>
         </div>
         <ol className="easy-lines" data-testid="summary-lines">
@@ -275,7 +276,7 @@ export function ReportView({ run, stale, onBack }: Props) {
         </p>
         {(levels.length < 3 || (combos?.duplicateCount ?? 0) > 0) && (
           <p className="alert warn small" data-testid="combo-dedup-note">
-            손절폭이 좁아 호가 단위에서 같은 가격이 생겼습니다. 같은 손절가·목표가는 한 번만 계산해
+            손절폭이 좁아 1원 단위로 반올림하면서 같은 가격이 생겼습니다. 같은 손절가·목표가는 한 번만 계산해
             실제로는 <strong>{comboCount}개 조합</strong>(손절 {levels.length}단계 × 목표{" "}
             {targetRs.length}개 중)만 비교합니다. 칸마다 쓰인 손절가·목표가는 표에 그대로 적었어요.
           </p>

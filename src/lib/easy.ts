@@ -85,8 +85,42 @@ export function positiveTone(extreme = false): "pos" | "neutral" {
 /** 배지가 무엇을 기준으로 한 판정인지 배지 바로 밑에 적는다 */
 export const TRAFFIC_BASIS = "평균 금액 기준";
 
+/**
+ * 배지 아래 기준 줄 — 수량이 0주(무포지션)면 '평균 금액 기준'이라고 적지 않는다(v2.2.5).
+ *
+ * 0주면 실제로 건 금액이 0원이라 금액 기준 판정 자체가 성립하지 않는다. 그런데 v2.2.4까지는
+ * 0주 리포트에서도 배지 바로 아래에 `평균 금액 기준 · 1번 결과 평균은 손실 쪽`처럼 적혀
+ * '금액을 기준으로 판정했다'는 말과 '금액이 0원'이라는 사실이 서로 모순됐다(4호 봇 지적).
+ * 그래서 0주일 때는 무포지션 상태와 실제 거래 금액 0원, 그리고 판정이 1회 평균 배수(R)만 본
+ * 값이라는 사실을 그대로 적는다.
+ */
+export function trafficBasis(shares: number, side: Side): string {
+  if (shares > 0) return TRAFFIC_BASIS;
+  const trade = side === "buy" ? "매수" : "매도";
+  return `무포지션(0주) 상태 — 1회 평균 배수(R) 기준 (실제 ${trade} 금액 0원)`;
+}
+
 /** 1회 평균 R이 이 값보다 작으면 '거의 본전(반반)'으로 본다 */
 export const FLAT_R = 0.02;
+
+/**
+ * 계산에 쓰는 반올림 단위 — `1원` 또는 `0.01`.
+ *
+ * v2.2.5 — 이 반올림을 `호가 단위`라고 부르지 않는다. 실제 한국거래소 호가 단위는 가격대별로
+ * 달라서(1원·5원·10원·50원·100원·500원·1,000원) 1원으로 고정된 값이 호가 단위가 아니다.
+ * 이 앱은 계산을 단순하게 하려고 가격을 1원(또는 0.01) 단위로 반올림해서 쓴다.
+ */
+export function calcRoundingStep(unit: string): string {
+  return unit === "원" || !unit ? "1원" : "0.01";
+}
+
+/** 계산용 반올림 단위를 화면 문장으로 — 실제 호가 단위와 다르다는 사실을 함께 적는다 */
+export function calcRoundingNote(unit: string): string {
+  const krw = unit === "원" || !unit;
+  return `계산용 ${krw ? "1원" : "0.01"} 단위 반올림 (${
+    krw ? "실제 거래소 호가 단위는 가격대별로 다름" : "실제 거래 단위와 다를 수 있음"
+  })`;
+}
 
 /**
  * 신호등 단계 — extreme(손절폭이 진입가의 0.01% 미만)이면 유리/손실 판정 대신 중립을 돌려준다.
@@ -555,7 +589,7 @@ export function easyAvgMultiple(avgR: number): string {
   return `평균 ${sign}${formatNumber(abs, 2)}배`;
 }
 
-/** 표 머리의 손절 행 이름 — 내 계획의 몇 배인지 (호가 단위로 반올림된 실제 손절폭 기준) */
+/** 표 머리의 손절 행 이름 — 내 계획의 몇 배인지 (계산용 반올림된 실제 손절폭 기준) */
 export function easyStopLevelLabel(levelPct: number, basePct: number): string {
   if (!(basePct > 0)) return "손절폭";
   const mult = levelPct / basePct;

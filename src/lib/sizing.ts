@@ -83,7 +83,7 @@ export function sizePosition(input: SizeInput): SizeResult {
     warnings.push(
       `손절폭이 진입가의 0.01% 미만(진입 ${entry.toLocaleString("ko-KR")} / 손절 ${stop.toLocaleString(
         "ko-KR"
-      )})으로 극단적으로 좁습니다. 호가 단위·체결 오차만으로도 손절이 즉시 걸릴 수 있어 결과를 참고용으로만 보세요.`
+      )})으로 극단적으로 좁습니다. 실제 호가 단위(가격대별로 다름)·체결 오차만으로도 손절이 즉시 걸릴 수 있어 결과를 참고용으로만 보세요.`
     );
   }
   if (shares === 0 && riskPerShare > 0) {

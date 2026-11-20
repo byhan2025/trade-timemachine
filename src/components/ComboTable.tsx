@@ -11,6 +11,7 @@ import {
   type ComboMode,
 } from "../lib/terms";
 import {
+  calcRoundingNote,
   easyAvgMultiple,
   easyProfitCount,
   easyStopLevelLabel,
@@ -30,7 +31,7 @@ interface Props {
   extreme?: boolean;
 }
 
-/** 열 이름과 실제 목표 배수가 0.5% 넘게 어긋나는지 (호가 단위 반올림 때문) */
+/** 열 이름과 실제 목표 배수가 0.5% 넘게 어긋나는지 (계산용 1원 단위 반올림 때문) */
 
 /**
  * 🎯 손절·목표 조합 비교표 (v2.2 쉬운 말 버전).
@@ -38,8 +39,13 @@ interface Props {
  * 정확한 R·이익 마감률은 title(툴팁)·접이식 상세 줄에 그대로 남긴다.
  *
  * v2.2.4 — 열 이름이 '요청한 배수'가 아니라 **화면에 적힌 목표가로 다시 계산한 실제 배수**를 가리킨다.
- *   · 호가 단위 반올림으로 요청 배수와 실제 배수가 달라지는 열은 `＊`를 붙이고, 칸마다 실제 목표가·배수를 적는다.
+ *   · 계산용 반올림으로 요청 배수와 실제 배수가 달라지는 열은 `＊`를 붙이고, 칸마다 실제 목표가·배수를 적는다.
  *   · 같은 행에서 두 배수가 같은 목표가가 되면 한 번만 계산하고 다른 칸은 '같은 목표가'로 표시한다.
+ *
+ * v2.2.5 — 클릭할 수 있는 칸은 표 구조(`table > row > cell`) 안에 두되, 실제 클릭 요소는
+ *   `<button type="button">`이다. 종전에는 버튼에 `role="cell"`을 덮어써서 화면 판독기 트리에
+ *   버튼이 아예 없었다(4호 봇 지적). 이제 바깥 `div[role=cell]` 안에 진짜 버튼을 두어
+ *   버튼 역할·키보드 포커스·Enter/Space 동작이 그대로 살아 있고, 터치 영역도 44×44px 이상이다.
  */
 export function ComboTable({ result, loading, unit, mode, onMode, baseStopPct, extreme }: Props) {
   const [picked, setPicked] = useState<string | null>(null);
@@ -127,8 +133,8 @@ export function ComboTable({ result, loading, unit, mode, onMode, baseStopPct, e
 
       {anyDeviating && (
         <p className="alert warn small combo-target-note" role="status" data-testid="combo-target-note">
-          ＊표시 열은 호가 단위({unit === "원" || !unit ? "1원" : "0.01"}) 때문에 요청한 목표 배수와 실제
-          목표 배수가 달라요. 그 열은 칸마다 실제 목표가와 실제 배수를 함께 적었어요.
+          ＊표시 열은 {calcRoundingNote(unit)} 때문에 요청한 목표 배수와 실제 목표 배수가 달라요. 그 열은
+          칸마다 실제 목표가와 실제 배수를 함께 적었어요.
         </p>
       )}
 
@@ -176,23 +182,20 @@ export function ComboTable({ result, loading, unit, mode, onMode, baseStopPct, e
               const cell = result.cells.find(
                 (c) => c.stopPct === level.stopPct && c.targetR === targetR
               );
-              if (!cell) return <span key={targetR} />;
+              if (!cell) return <span key={targetR} role="cell" aria-hidden="true" />;
               const key = cellKey(cell);
               const info = columns.find((c) => c.targetR === targetR);
               if (cell.duplicateOfR !== undefined) {
                 return (
-                  <span
-                    key={targetR}
-                    role="cell"
-                    className="combo-cell combo-cell-dup"
-                    data-testid="combo-cell-dup"
-                  >
-                    <strong>앞 칸과 목표가 같아요</strong>
-                    <span className="muted">
-                      {formatPrice(cell.target, unit)} · 실제 {easyTargetMultiple(cell.actualR)}
+                  <div key={targetR} role="cell" className="combo-slot">
+                    <span className="combo-cell combo-cell-dup" data-testid="combo-cell-dup">
+                      <strong>앞 칸과 목표가 같아요</strong>
+                      <span className="muted">
+                        {formatPrice(cell.target, unit)} · 실제 {easyTargetMultiple(cell.actualR)}
+                      </span>
+                      <span className="muted small">같은 목표가라 한 번만 계산했어요</span>
                     </span>
-                    <span className="muted small">같은 목표가라 한 번만 계산했어요</span>
-                  </span>
+                  </div>
                 );
               }
               const best = key === bestKey;
@@ -201,38 +204,39 @@ export function ComboTable({ result, loading, unit, mode, onMode, baseStopPct, e
                 cell.targetR
               )} → 실제 ${easyTargetMultiple(cell.actualR)})`;
               return (
-                <button
-                  key={targetR}
-                  type="button"
-                  role="cell"
-                  className={`combo-cell${best ? " best" : ""}${selected ? " picked" : ""}`}
-                  onClick={() => setPicked(key)}
-                  aria-pressed={selected}
-                  data-testid="combo-cell"
-                  aria-label={`손절 ${formatPrice(cell.stop, unit)} · ${actualText}: ${easyProfitCount(
-                    cell.pGreen
-                  )}, ${easyAvgMultiple(cell.avgR)}`}
-                  title={`손절 ${formatPrice(cell.stop, unit)} · ${actualText} · ${GREEN_LABEL} ${formatPct(
-                    cell.pGreen
-                  )} · 평균 R ${formatR(cell.avgR)}`}
-                >
-                  {best && !allNegative && (
-                    <span className="combo-best-star" aria-hidden="true">
-                      ★
+                <div key={targetR} role="cell" className="combo-slot">
+                  {/* 실제 클릭 요소는 진짜 버튼 — 표 구조 안에서도 역할·포커스·Enter/Space를 잃지 않는다(v2.2.5) */}
+                  <button
+                    type="button"
+                    className={`combo-cell${best ? " best" : ""}${selected ? " picked" : ""}`}
+                    onClick={() => setPicked(key)}
+                    aria-pressed={selected}
+                    data-testid="combo-cell"
+                    aria-label={`손절 ${formatPrice(cell.stop, unit)} · ${actualText}: ${easyProfitCount(
+                      cell.pGreen
+                    )}, ${easyAvgMultiple(cell.avgR)}`}
+                    title={`손절 ${formatPrice(cell.stop, unit)} · ${actualText} · ${GREEN_LABEL} ${formatPct(
+                      cell.pGreen
+                    )} · 평균 R ${formatR(cell.avgR)}`}
+                  >
+                    {best && !allNegative && (
+                      <span className="combo-best-star" aria-hidden="true">
+                        ★
+                      </span>
+                    )}
+                    <strong className={cell.pGreen >= 0.5 && !extremeMode ? "cell-profit" : "cell-rare"}>
+                      {easyProfitCount(cell.pGreen)}
+                    </strong>
+                    <span className={cell.avgR >= 0 ? positive : "neg"}>
+                      {easyAvgMultiple(cell.avgR)}
                     </span>
-                  )}
-                  <strong className={cell.pGreen >= 0.5 && !extremeMode ? "cell-profit" : "cell-rare"}>
-                    {easyProfitCount(cell.pGreen)}
-                  </strong>
-                  <span className={cell.avgR >= 0 ? positive : "neg"}>
-                    {easyAvgMultiple(cell.avgR)}
-                  </span>
-                  {info?.deviating && (
-                    <span className="combo-cell-actual" data-testid="combo-cell-actual">
-                      {formatPrice(cell.target, unit)} · 실제 {easyTargetMultiple(cell.actualR)}
-                    </span>
-                  )}
-                </button>
+                    {info?.deviating && (
+                      <span className="combo-cell-actual" data-testid="combo-cell-actual">
+                        {formatPrice(cell.target, unit)} · 실제 {easyTargetMultiple(cell.actualR)}
+                      </span>
+                    )}
+                  </button>
+                </div>
               );
             })}
           </div>

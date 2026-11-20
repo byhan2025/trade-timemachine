@@ -15,11 +15,11 @@ export interface ComboCell {
   stop: number;
   /** 요청한 목표 배수(손절폭의 N배) */
   targetR: number;
-  /** 화면·계산에 실제로 쓰인 목표가 (호가 단위 반올림 뒤) */
+  /** 화면·계산에 실제로 쓰인 목표가 (계산용 1원 단위 반올림 뒤) */
   target: number;
   /**
    * 실제 목표가와 손절가로 다시 계산한 배수 = |목표가 − 진입가| ÷ |진입가 − 손절가|.
-   * v2.2.4 — 호가 단위 반올림 때문에 요청 배수와 달라질 수 있어, 표기는 이 값을 쓴다.
+   * v2.2.4 — 계산용 반올림 때문에 요청 배수와 달라질 수 있어, 표기는 이 값을 쓴다.
    */
   actualR: number;
   /** 같은 행에서 앞 칸과 목표가가 같아 다시 계산하지 않은 경우, 그 앞 칸의 목표 배수 */
@@ -88,7 +88,7 @@ export function compareCombos(input: {
   targetRs?: number[];
   replays?: number;
   seed?: number;
-  /** 호가 단위 반올림용 통화 단위 ("원"이면 1원 단위) */
+  /** 계산용 반올림 단위 ("원"이면 1원 단위 — 실제 거래소 호가 단위와는 다름) */
   unit?: string;
 }): ComboResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -102,10 +102,10 @@ export function compareCombos(input: {
   let duplicateCount = 0;
   for (const level of levels) {
     const risk = Math.abs(entry - level.stop);
-    /** 같은 행에서 이미 쓴 목표가 — 호가 단위에서 두 배수가 같은 가격이 되면 한 번만 계산한다(v2.2.4) */
+    /** 같은 행에서 이미 쓴 목표가 — 계산용 반올림에서 두 배수가 같은 가격이 되면 한 번만 계산한다(v2.2.4) */
     const usedTargets: { targetR: number; target: number; cell: ComboCell }[] = [];
     for (const targetR of targetRs) {
-      // 화면·표에 보이는 목표가와 계산에 쓰는 목표가를 같게 만든다(호가 단위 반올림).
+      // 화면·표에 보이는 목표가와 계산에 쓰는 목표가를 같게 만든다(계산용 1원/0.01 단위 반올림).
       const raw = side === "buy" ? entry + targetR * risk : entry - targetR * risk;
       let target = roundPrice(raw, unit);
       if (target === entry) {
@@ -186,7 +186,7 @@ export const COMBO_R_TOLERANCE = 0.005;
 
 /**
  * 열 이름을 만들 때 쓸 배수 — 요청 배수(1.5배 등)와 그 열에 실제로 쓰인 목표가의 배수를 비교한다.
- * v2.2.4 — 진입 100,000 / 손절 99,999 같은 입력에서는 1원 호가 때문에 1.5배 목표가 100,002원이 되어
+ * v2.2.4 — 진입 100,000 / 손절 99,999 같은 입력에서는 1원 단위 반올림 때문에 1.5배 목표가 100,002원이 되어
  * 실제로는 2배가 된다. 그때 열 이름을 '목표 1.5배'로 두면 목표가·칸 숫자와 서로 모순된다.
  */
 export function targetColumnLabels(

@@ -381,7 +381,7 @@ export default function App() {
             <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
           </div>
         </div>
-        <span className="pill">v2.2.4 · 0주 경고 분리·조합표 실제 배수·요약 모순 정리</span>
+        <span className="pill">v2.2.5 · 0주 부제·계산용 1원 단위 표기·조합표 버튼 접근성</span>
       </header>
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
@@ -874,7 +874,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.2.4 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v2.2.5 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
           시세 · 투자 자문 아님
         </p>
         <p>

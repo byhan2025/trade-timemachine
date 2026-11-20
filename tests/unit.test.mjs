@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import {
   parseCustom,
   buildPool,
@@ -37,6 +37,9 @@ import {
   easyGlossary,
   TRAFFIC_BADGES,
   TRAFFIC_BASIS,
+  trafficBasis,
+  calcRoundingStep,
+  calcRoundingNote,
   EXTREME_STOP_REASON,
   EXTREME_BANNER_NOTE,
   EXTREME_AVG_R_NOTE,
@@ -1979,14 +1982,14 @@ test("v2.2.4 배선: 배너·결과 카드·리포트가 같은 퍼센트 표기
   assert.match(combo, /실제 \{easyTargetMultiple\(cell\.actualR\)\}/);
 });
 
-test("v2.2.4 버전 표기: package.json·배지·푸터·README 가 같은 버전을 가리킨다", () => {
+test("v2.2.5 버전 표기: package.json·배지·푸터·README 가 같은 버전을 가리킨다", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-  assert.equal(pkg.version, "2.2.4");
+  assert.equal(pkg.version, "2.2.5");
   const app = readFileSync("src/App.tsx", "utf8");
-  assert.match(app, /v2\.2\.4 · /);
-  assert.match(app, /한국형 타임머신 시뮬레이터 v2\.2\.4/);
+  assert.match(app, /v2\.2\.5 · /);
+  assert.match(app, /한국형 타임머신 시뮬레이터 v2\.2\.5/);
   const readme = readFileSync("README.md", "utf8");
-  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.2\.4\)/);
+  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.2\.5\)/);
 });
 
 test("v2.2.4 봇 재현 ②: 진입 100,000 / 손절 99,999 / 목표 100,002 — 표에 1.5배가 아니라 실제 2배로 적힌다", async () => {
@@ -2019,7 +2022,8 @@ test("v2.2.4 봇 재현 ②: 진입 100,000 / 손절 99,999 / 목표 100,002 —
   // 같은 목표가를 두 번 계산하지 않고, 다른 칸은 '앞 칸과 목표가 같아요'로 표시한다
   assert.match(html, /앞 칸과 목표가 같아요/);
   assert.equal(result.duplicateCount, 1);
-  assert.match(html, /호가 단위\(1원\)/);
+  assert.match(html, /계산용 1원 단위 반올림/);
+  assert.ok(!html.includes("호가 단위(1원)"), "계산용 1원 반올림을 '호가 단위(1원)'라고 부르면 안 됩니다");
   assert.ok(!html.includes("더 많았어요"));
   const cells = await (async () => result.cells)();
   for (const c of cells) {
@@ -2067,4 +2071,136 @@ test("v2.2.4 봇 재현 ③: 목표 도달률 0.01%(1만 번 중 1번)를 '없�
   assert.match(zero.lines[0], /1만 번 해보면 약 1번은 목표 가격까지/);
   assert.ok(!zero.lines[0].includes("없었고"), zero.lines[0]);
   assert.equal(zero.note, ZERO_SHARES_NOTE);
+});
+
+/* ================================================================ v2.2.5 4호 봇 남은 결함 3건 */
+
+test("v2.2.5 결함1: 0주 리포트는 배지 아래에 '평균 금액 기준'이라고 적지 않는다", () => {
+  // 0주(무포지션) — 실제로 건 금액이 0원이라 금액 기준 판정 자체가 성립하지 않는다
+  assert.equal(trafficBasis(0, "buy"), "무포지션(0주) 상태 — 1회 평균 배수(R) 기준 (실제 매수 금액 0원)");
+  assert.match(trafficBasis(0, "sell"), /무포지션\(0주\) 상태/);
+  assert.match(trafficBasis(0, "sell"), /실제 매도 금액 0원/);
+  assert.ok(!trafficBasis(0, "buy").includes(TRAFFIC_BASIS), "0주 문구에 '평균 금액 기준'이 남아 있습니다");
+  assert.ok(!trafficBasis(0, "sell").includes(TRAFFIC_BASIS));
+  // 수량이 있으면 종전 그대로 금액 기준(회귀 없음)
+  assert.equal(trafficBasis(10, "buy"), TRAFFIC_BASIS);
+  assert.equal(trafficBasis(1, "sell"), TRAFFIC_BASIS);
+  assert.equal(TRAFFIC_BASIS, "평균 금액 기준");
+
+  // 리포트 결선 — 기준 줄이 수량·방향을 아는 trafficBasis를 쓴다
+  const rep = readFileSync("src/components/ReportView.tsx", "utf8");
+  assert.match(rep, /\{trafficBasis\(run\.size\.shares, run\.plan\.side\)\}/);
+  assert.doesNotMatch(rep, /\{TRAFFIC_BASIS\} ·/);
+  assert.match(rep, /data-testid="traffic-basis"/);
+
+  // 0주의 기준 줄 옆 금액 칩도 금액을 말하지 않는다(2줄과 같은 사실)
+  const chip = easyMoneyChip({ avgR: -0.29, oneR: 0, unit: "원", shares: 0 });
+  assert.match(chip, /1번 결과 평균은 손실 쪽/);
+  assert.ok(!chip.includes("원"), chip);
+});
+
+test("v2.2.5 결함2: 1원 반올림을 '호가 단위'라고 부르지 않는다", () => {
+  // 실제 한국거래소 호가 단위는 가격대별로 다르다 — 계산 편의를 위한 1원 반올림과 구분해 적는다
+  assert.equal(calcRoundingNote("원"), "계산용 1원 단위 반올림 (실제 거래소 호가 단위는 가격대별로 다름)");
+  assert.equal(calcRoundingNote(""), calcRoundingNote("원"));
+  assert.equal(calcRoundingNote("달러"), "계산용 0.01 단위 반올림 (실제 거래 단위와 다를 수 있음)");
+  assert.equal(calcRoundingStep("원"), "1원");
+  assert.equal(calcRoundingStep(""), "1원");
+  assert.equal(calcRoundingStep("달러"), "0.01");
+
+  // 소스 어디에도 '호가 단위(1원)'처럼 1원을 호가 단위로 단정하는 문구가 없다
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(`${dir}/${e.name}`) : [`${dir}/${e.name}`]
+    );
+  const srcFiles = walk("src").filter((f) => /\.(ts|tsx)$/.test(f));
+  assert.ok(srcFiles.length >= 20, `src 파일 ${srcFiles.length}개만 검사했습니다`);
+  const offenders = srcFiles.filter((f) => {
+    const body = readFileSync(f, "utf8");
+    // 1원(0.01) 반올림을 호가 단위라고 단정하는 표기만 찾는다 — '실제 호가 단위(가격대별)' 안내는 정상
+    return body.includes("호가 단위(1원)") || body.includes("호가 단위(0.01)");
+  });
+  assert.deepEqual(offenders, [], "1원 반올림을 '호가 단위(…)'로 적은 파일이 있습니다");
+  const readme = readFileSync("README.md", "utf8");
+  assert.ok(!readme.includes("호가 단위(1원)"), "README에 '호가 단위(1원)' 표기가 남아 있습니다");
+  assert.match(readme, /계산용 1원 단위 반올림/);
+
+  // 실제 화면(조합표 ＊ 안내)도 같은 문구를 쓴다
+  const cssFree = readFileSync("src/components/ComboTable.tsx", "utf8");
+  assert.match(cssFree, /calcRoundingNote\(unit\)/);
+  assert.ok(!cssFree.includes("호가 단위("), "조합표 안내에 '호가 단위(…)' 표기가 남아 있습니다");
+});
+
+test("v2.2.5 결함3: 조합표 클릭 칸이 화면 판독기에 버튼으로 노출된다", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { ComboTable, h } = await import("./.build/lib.mjs");
+  const d = datasetFor();
+  const pool = buildPool(d.sessions, d.times.length);
+  const entry = 100_130;
+  const baseStopPct = 0.011;
+  const levels = buildStopLevels(entry, baseStopPct, "원", "buy");
+  const result = compareCombos({ pool, entry, side: "buy", entryBar: 5, levels, replays: 100, unit: "원" });
+  const html = renderToStaticMarkup(
+    h(ComboTable, { result, loading: false, unit: "원", mode: "green", onMode: () => {}, baseStopPct, extreme: false })
+  );
+
+  // 표 구조는 그대로: role=table > role=row > role=cell(div) > 실제 button
+  const clickable = result.cells.filter((c) => c.duplicateOfR === undefined).length;
+  assert.ok(clickable >= 3, `계산된 칸 ${clickable}개`);
+  assert.equal(
+    [...html.matchAll(/<div role="cell" class="combo-slot"><button type="button"/g)].length,
+    clickable,
+    "클릭 칸마다 cell 안의 진짜 버튼이 있어야 합니다"
+  );
+  assert.equal([...html.matchAll(/<button[^>]*type="button"[^>]*class="combo-cell/g)].length, clickable);
+  // 종전 결함: 버튼에 role="cell"을 덮어써 버튼 역할이 사라졌다
+  assert.ok(!/<button[^>]*role="cell"/.test(html), "버튼 역할이 cell로 덮여 있습니다");
+  assert.ok(html.includes('role="table"') && html.includes('role="row"') && html.includes('role="cell"'));
+  // 눌림 상태는 aria-pressed로 알린다
+  const pressed = [...html.matchAll(/<button[^>]*class="combo-cell[^"]*"[^>]*aria-pressed="(true|false)"/g)].map(
+    (m) => m[1]
+  );
+  assert.equal(pressed.length, clickable);
+  assert.ok(pressed.every((v) => v === "false"), "아직 고른 칸이 없는데 눌림으로 표시됩니다");
+
+  // 같은 목표가 칸은 버튼이 아니라 같은 cell 안의 안내다(누를 대상이 아니다)
+  const dupResult = compareCombos({
+    pool,
+    entry: 100_000,
+    side: "buy",
+    entryBar: 5,
+    levels: buildStopLevels(100_000, 0.001 / 100_000, "원", "buy"),
+    replays: 100,
+    unit: "원",
+  });
+  const dupHtml = renderToStaticMarkup(
+    h(ComboTable, {
+      result: dupResult,
+      loading: false,
+      unit: "원",
+      mode: "green",
+      onMode: () => {},
+      baseStopPct: 0.001 / 100_000,
+    })
+  );
+  assert.ok(dupResult.duplicateCount > 0);
+  assert.match(dupHtml, /<div role="cell" class="combo-slot"><span class="combo-cell combo-cell-dup"/);
+  assert.equal(
+    [...dupHtml.matchAll(/<div role="cell" class="combo-slot"><button type="button"/g)].length,
+    dupResult.cells.filter((c) => c.duplicateOfR === undefined).length
+  );
+
+  // 터치 영역 44×44px 이상 + 키보드 포커스 표시
+  const cell = ruleOf(".combo-cell");
+  assert.match(cell, /min-height:\s*64px/);
+  assert.match(cell, /min-width:\s*44px/);
+  assert.match(cell, /width:\s*100%/);
+  const slot = ruleOf(".combo-slot");
+  assert.match(slot, /min-height:\s*44px/);
+  assert.match(V22_CSS, /\.combo-cell:focus-visible\s*\{[^}]*outline:\s*3px solid/);
+  // 네이티브 버튼이라 Enter·Space가 click으로 이어지고, 상태 변경은 onClick 하나뿐이다
+  const src = readFileSync("src/components/ComboTable.tsx", "utf8");
+  assert.match(src, /<button\s+type="button"/);
+  assert.match(src, /onClick=\{\(\) => setPicked\(key\)\}/);
+  assert.doesNotMatch(src, /onKeyDown/);
 });
