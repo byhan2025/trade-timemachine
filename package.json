@@ -1,17 +1,16 @@
 {
   "name": "trade-timemachine",
   "private": true,
-  "version": "2.3.0",
+  "version": "2.3.1",
   "type": "module",
-  "description": "한국형 타임머신 시뮬레이터 - 1만 번 모의 재생 + 내장 종목·CSV/JSON (투자 권유 아님)",
+  "description": "한국형 타임머신 시뮬레이터 - 1만 번 모의 재생 + 가상 체험 5분봉·내 CSV·내 API 키 (투자 권유 아님)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && vite build --base=/trade-timemachine/",
     "preview": "vite preview --port 4180 --strictPort",
     "deploy:pages": "npm run build:pages && node scripts/deploy-pages.mjs",
-    "samples": "python3 scripts/fetch_samples.py",
-    "test:api": "deno test --allow-net --allow-read supabase/functions/stock-bars/",
+    "samples": "python3 scripts/make_synthetic_samples.py",
     "test": "node scripts/test-unit.mjs",
     "test:unit": "node scripts/test-unit.mjs"
   },

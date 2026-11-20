@@ -1,4 +1,4 @@
-# 한국형 타임머신 시뮬레이터 (v2.3.0)
+# 한국형 타임머신 시뮬레이터 (v2.3.1)
 
 계획한 진입가·손절가·목표가를 **과거 실제 봉 데이터의 수익률 분포로 10,000번 다시 걸어보는** 독립 웹앱입니다.
 2단계에서 **실시간 5분봉 검색 UI**와 **GitHub Pages 공개 배포**, **Supabase Edge Function `stock-bars` 중계 서버**를 붙였고(실시간 검색은 v2.3.0에서 화면에서 제외 — 아래 「실시간 검색을 뺀 이유」),
@@ -54,7 +54,7 @@ v2.3.0은 사용자 지시 두 가지를 반영했습니다 — **①깨진 모�
 
 - 라이브: <https://byhan2025.github.io/trade-timemachine/>
 - 오리지널 로직: `Jakeschincariol/day-trader-skill`의 `trader-timemachine/timemachine.py`, `trader-exit/exit.py`, `trader-budget/size.py`, `trader-risk/check.py`
-- 스택: Vite + React + TypeScript (엔진은 순수 TS, 10,000회 약 35~60ms) + Supabase Edge Function (Deno)
+- 스택: Vite + React + TypeScript (엔진은 순수 TS, 10,000회 약 35~60ms) + 정적 GitHub Pages (서버 없음)
 
 ## 실행
 
@@ -66,97 +66,85 @@ npm run build        # tsc -b && vite build -> dist/ (base "/")
 npm run build:pages  # GitHub Pages 서브패스 빌드 -> dist/ (base "/trade-timemachine/")
 npm run preview      # dist 미리보기 (127.0.0.1:4180)
 npm run deploy:pages # build:pages + dist/ 를 gh-pages 브랜치로 푸시
-npm run test:api     # Supabase 함수 단위·실서비스 테스트 (deno test)
-npm test             # 프론트엔드 단위 테스트 94개 (esbuild 번들 + node --test, 추가 설치 없음)
+npm run samples      # 가상 체험 5분봉 5종 재생성 (고정 시드)
+npm test             # 프론트엔드 단위 테스트 107개 (esbuild 번들 + node --test, 추가 설치 없음)
 ```
 
-## 실시간 검색을 뺀 이유 (v2.3.0)
+## 본인 API 키로 5분봉 불러오기 — BYOK (v2.3.1)
 
-2단계에서 붙였던 **[실시간 종목 검색]** 입력창과 `stock-bars` 중계 호출은 v2.3.0에서 화면에서 제외했습니다.
-사용자 지시(“실시간 종목 검색은 화면에서 비활성화”)에 따른 것이고, 앱은 이제 **어떤 시세 서버도 부르지 않습니다**
-(브라우저 네트워크 탭에 `stock-bars` 요청 0건, `supabase.co` 문자열도 번들에 없음).
+사용자 지시(“2안으로 하되 사용방법을 하나하나 가이드해주는걸 넣어줄수있어?”)에 따라,
+**방문자가 자기 무료 API 키를 넣어 5분봉을 직접 받아오는 길**을 열었습니다. 중계 서버는 없습니다 —
+방문자 브라우저가 시세 제공처에 **직접** 요청하고, 키는 그 요청에만 붙습니다.
 
-같은 이유로 **한·미 거래량 상위 50종목씩 100종목 내장**도 진행하지 않았습니다. 무료·공개 5분봉 소스의 약관을
-확인한 결과 **공개 웹사이트에 5분봉을 JSON으로 실어 재배포하는 것을 허용하는 소스가 없었습니다**(근거는 아래 「시세 데이터 약관」).
-억지로 넣지 않고, 확인된 사실과 대안만 남깁니다.
+| 화면 순서 | 방문자가 하는 일 | 확인된 사실 (2026-11-20, 공식 문서·실응답) |
+| --- | --- | --- |
+| 1단계 | [Twelve Data 무료 가입](https://twelvedata.com/register) 새 탭 열기 | Basic 플랜 **월 $0**, **1분 8회·하루 800회**, 열린 시장 **3곳(미국 주식·ETF·외환·암호화폐)** |
+| 2단계 | [My API Keys](https://twelvedata.com/account/api-keys)에서 키 복사 | 키는 계정 화면에서 발급·재발급 |
+| 3단계 | 키·티커를 넣고 **[데이터 불러오기]** | `GET https://api.twelvedata.com/time_series?interval=5min&outputsize=5000` — `access-control-allow-origin: *` 라 브라우저 직접 호출 가능(Origin `https://byhan2025.github.io`로 확인). 데모 키로 AAPL 5,000봉 = **78봉 × 64일** 수신 확인 |
+| 4단계 | 한국 종목은 증권사 HTS 5분봉 CSV | 무료 플랜 3개 시장에 **KRX가 없어** 한국 5분봉은 유료 플랜이 필요 — 대신 HTS CSV를 그대로 올리면 같은 계산 |
 
-- 재사용을 위해 `src/lib/stockApi.ts`·`src/components/StockSearch.tsx`·`supabase/functions/stock-bars/` 는 **남겨 두었지만 앱에서 import 하지 않습니다**
-  (다시 쓰려면 먼저 약관 확인이 필요합니다).
-- 남은 입력 경로: **내장 5종목** + **CSV·JSON 붙여넣기/업로드**. 둘 다 브라우저 안에서만 처리됩니다.
+- **키 보관**: 기본은 메모리(새로 고침하면 사라짐). 화면의 스위치를 켤 때만 이 브라우저 `localStorage`
+  (`ttm.byok.twelvedata.key.v1`)에 남기고, 스위치를 끄면 즉시 지웁니다. 사이트 서버로는 키도 데이터도 가지 않습니다.
+- **오류 안내**: 잘못된 키(401) · 이 플랜에서 못 여는 종목(403, 한국 종목 포함) · 분당/일일 한도(429) ·
+  없는 티커(404) · 5xx · 네트워크/차단을 각각 다른 문구로 알려 줍니다(제공처 메시지를 그대로 노출하지 않고,
+  키가 응답에 섞여 와도 `***`로 가립니다).
+- **데이터 모양**: 응답을 그대로 쓰지 않고, 봉 수가 정확히 같은 **완전한 하루(세션)만** 남깁니다
+  (진행 중·반장·갭 세션 제외, 제외 목록은 데이터 출처 카드에 기록). 3일 미만이면 계산하지 않습니다.
+- 5분봉·봉 시작 시각·세션 구간·조회 시각은 기존 내장 데이터와 같은 형식으로 `meta`에 적힙니다.
+
+같은 이유로 **한·미 100종목 내장**은 하지 않았습니다(v2.3.0 판단 유지). 무료·공개 5분봉을 공개 사이트에
+JSON으로 실어 재배포하는 것이 허용되는지 **약관별로 결론이 다르고, 유료 재배포 애드온·별도 계약이 필요한 곳이
+많아** 일괄 “전부 금지”로 단정하지 않습니다(아래 표). 대신 ① 본인 키로 조회(BYOK) ② 내 CSV/HTS 내보내기
+③ 저작권 쟁점이 없는 **가상 체험 데이터** 세 길로 정리했습니다.
+
+### 내장 데이터는 가상 생성 5종 (v2.3.1)
+
+`public/samples/` 의 5종목은 **실제 시세가 아니라 무작위로 만든 가상 패턴**입니다.
+Yahoo에서 받아 두었던 실제 5분봉 5종과 수집 스크립트(`scripts/fetch_samples.py`), 쓰지 않던
+`stockApi.ts`·`StockSearch.tsx`·`supabase/functions/stock-bars/` 중계 코드는 **저장소에서 삭제**했습니다.
+
+| 파일 | 이름 | 세션 |
+| --- | --- | --- |
+| `SYN-STABLE.json` | [가상 체험] 대형주 안정형 패턴 | 45일 × 72봉(09:00~14:55) |
+| `SYN-THEME.json` | [가상 체험] 고변동 테마주 패턴 | 45일 × 72봉 |
+| `SYN-UPTREND.json` | [가상 체험] 완만한 상승 우량주 패턴 | 45일 × 78봉(09:30~15:55) |
+| `SYN-REBOUND.json` | [가상 체험] 급락 뒤 반등형 패턴 | 45일 × 78봉 |
+| `SYN-BOX.json` | [가상 체험] 박스권 횡보형 패턴 | 45일 × 72봉 |
+
+- 생성기: `python3 scripts/make_synthetic_samples.py` (표준 라이브러리만, 고정 시드 → 같은 파일이 다시 나옴)
+- 화면 고지: 종목 이름이 `[가상 체험]`으로 시작하고, 선택하면 **“실제 시세가 아닌 가상 생성 통계 예시”** 배너,
+  데이터 출처 카드에 **가상 체험 데이터** 배지와 “저작권·약관 문제가 없는 가상 생성 통계 예시” 문구가 나옵니다.
+- 파일마다 `synthetic: true`, `meta.source = "가상 생성(합성) 시세 — 실제 시세 아님 · 저작권 문제 없음"`.
 
 ## 시세 데이터 약관 (2026-11-20 확인)
 
-`public/samples/` 의 5종목은 Yahoo Finance Chart API(v8)에서 받은 실제 5분봉입니다. 아래는 **공개 GitHub Pages에
-한·미 100종목 5분봉을 내장(재배포)할 수 있는지**를 각 제공자의 공식 약관에서 확인한 결과입니다.
+아래는 **공개 GitHub Pages에 5분봉을 내장(재배포)할 수 있는지**를 각 제공자의 공식 약관에서 확인한 결과입니다.
+“무료로 API를 쓸 수 있다”와 “받은 데이터를 공개 사이트에 실을 수 있다”는 다른 문제라, 후자만 적었습니다.
 
-| 소스 | 확인한 약관 | 재배포 |
+| 소스 | 확인한 약관 | 공개 사이트 내장(재배포) |
 | --- | --- | --- |
-| Yahoo Finance (Chart v8) | Yahoo 약관 원문: *“Unless you have explicit written permission, you must not reproduce … distribute … any portion or use of, or access to, the Services”* | ✗ |
-| Alpha Vantage | ToS §2a: 개인·비상업 용도 라이선스. 다른 사람이 정보에 접근할 수 있게 하는 것은 “commercial use”로 규정 | ✗ |
-| Twelve Data | ToU §2.1~2.4: 라이선스는 **Internal Use** 한정. 제3자 제공은 `Redistribution Rights Add-On` 또는 별도 서면 계약 필요 | ✗ |
-| Finnhub | ToS “Redistribution Rights”: **데이터 또는 그 파생 결과**를 서면 승인 없이 제3자와 공유·재배포 금지 | ✗ |
-| Tiingo | ToU §1.6·§7.3: 무료 Starter 플랜은 **영구 저장 자체가 금지**(휘발성 메모리만), 재배포는 별도 유료 라이선스 | ✗ |
-| Polygon (Massive) | Individuals ToS §1 / Market Data Terms §1: 개인·비상업 용도. “**다른 사람과 정보를 공유하거나 다른 사용자를 위한 서비스·앱을 만드는 것은 허용되지 않는다**” | ✗ |
-| Stooq | 약관 §5.3 원문: *“Redistribution of data found on the website is not allowed without the consent of Stooq.”* | ✗ |
-| 금융위원회_주식시세정보 (공공데이터포털) | **공공누리 제4유형**(출처표시+상업적 이용금지+변경금지). “상업적 목적 여부와 상관 없이 **제3자 무단 제공 및 재배포가 엄격히 금지**” — 게다가 **일별** 데이터라 5분봉이 아님 | ✗ |
-| KRX 정보데이터시스템 | 시세는 유료 라이선스(KRX Data Marketplace). 무료 재배포 없음 | △ 유료 |
-| 한국투자증권 KIS OpenAPI | 본인 계좌·본인 프로그램용 개인 이용 약관, 앱키는 개인 발급 | ✗ 공개 배포 |
+| Yahoo Finance (Chart v8) | Yahoo 약관 원문: *“Unless you have explicit written permission, you must not reproduce … distribute … any portion or use of, or access to, the Services”* | ✗ (문언상 명시 금지) |
+| Alpha Vantage | ToS §2a: 개인·비상업 용도 라이선스. 다른 사람이 정보에 접근할 수 있게 하는 것은 “commercial use”로 규정 | ✗ 개인·비상업 한정 |
+| Twelve Data | ToU §2.1~2.4: 라이선스는 **Internal Use** 한정. 제3자 제공은 `Redistribution Rights Add-On` 또는 별도 서면 계약 | ✗ 무료/기본 플랜 · **유료 애드온으로 가능** |
+| Finnhub | ToS “Redistribution Rights”: **데이터 또는 그 파생 결과**를 서면 승인 없이 제3자와 공유·재배포 금지 | ✗ 서면 승인·별도 계약 |
+| Tiingo | ToU §1.6·§7.3: 무료 Starter 플랜은 **영구 저장 자체가 금지**(휘발성 메모리만), 재배포는 별도 유료 라이선스 | ✗ 무료 플랜 · **유료 라이선스로 가능** |
+| Polygon (Massive) | Individuals ToS §1 / Market Data Terms §1: 개인·비상업 용도. “**다른 사람과 정보를 공유하거나 다른 사용자를 위한 서비스·앱을 만드는 것은 허용되지 않는다**” | ✗ 개인·비상업 한정 |
+| Stooq | 약관 §5.3 원문: *“Redistribution of data found on the website is not allowed without the consent of Stooq.”* | ✗ 동의 필요 |
+| 금융위원회_주식시세정보 (공공데이터포털) | **공공누리 제4유형**(출처표시+상업적 이용금지+변경금지). “상업적 목적 여부와 상관 없이 **제3자 무단 제공 및 재배포가 엄격히 금지**” — 게다가 **일별** 데이터라 5분봉이 아님 | ✗ 명시 금지 |
+| KRX 정보데이터시스템 | 시세는 유료 라이선스(KRX Data Marketplace). 무료 재배포 경로 없음 | △ 유료 계약 |
+| 한국투자증권 KIS OpenAPI | 본인 명의 계좌의 금융서비스용 **개인** 앱키 약관 | ✗ 공개 배포용 아님 |
 
-**결론**: 무료·공개 5분봉 소스 중 공개 사이트 재배포를 허용하는 곳은 없습니다. 그래서 100종목 내장은 하지 않았습니다.
-대안(사용자 결정 필요)은 ① **본인 API 키 입력 방식**(방문자 각자가 자기 키로 조회 — KIS OpenAPI·Twelve Data 무료 키),
-② **KRX·Tiingo·Twelve Data 유료 재배포 라이선스**(각각 별도 계약·비용), ③ **지금처럼 내 CSV/HTS 내보내기 업로드**,
-④ **가상(합성) 시세를 체험용으로 생성하되 화면에 ‘가상 데이터’라고 명시**입니다.
+**정리**: 공개 문서만으로 “무료로 재배포 가능”이 분명한 소스는 확인되지 않았고, 재배포가 가능한 곳은
+**유료 애드온·별도 서면 계약**이 조건입니다. 그래서 내장 데이터는 가상 생성으로 바꾸고, 실제 시세는
+**방문자 본인 키(BYOK)** 또는 **본인 CSV**로만 다루도록 했습니다.
 
-## 데이터
+## 화면 보조 기능 (v2.3.1)
 
-`public/samples/` 의 5종목 JSON은 **Yahoo Finance Chart API(v8 공개 엔드포인트)의 실제 최근 60거래일 5분봉**을
-`scripts/fetch_samples.py` 로 받아 세션별로 검증해 저장한 것입니다. 합성·보간한 봉은 없습니다.
-실시간 조회도 같은 검증 규칙(완전 세션만 사용)을 거칩니다.
-
-```bash
-python3 scripts/fetch_samples.py                 # 기본 5종목 재수집
-python3 scripts/fetch_samples.py --symbols 005930.KS TSLA
-```
-
-- 파이썬 표준 라이브러리만 사용 (urllib, zoneinfo, json)
-- 거래일별 봉 개수가 정확히 같은 "완전 세션"만 사용 (반장·갭·진행 중 세션 제외, 제외 목록을 메타에 기록)
-- 각 파일의 `meta`에 출처 URL, 수집 시각(+09:00), 봉 단위(5분봉), 봉 시각 의미(봉 시작), 세션 구간, 사용/제외 세션, 통화·가격 단위를 기록
-
-## Supabase Edge Function `stock-bars`
-
-`supabase/functions/stock-bars/`
-
-| 파일 | 내용 |
-| --- | --- |
-| `index.ts` | 라우팅·CORS(`Access-Control-Allow-Origin: *`)·타임아웃·캐시·오류 응답 |
-| `lib.ts` | 파싱/집계/세션 검증/검색 정규화 (Deno API 없음 → 그대로 단위 테스트) |
-| `lib_test.ts` | 실제 네이버·Yahoo 응답 캡처(`fixtures/`)로 16개 테스트 |
-| `live_test.ts` | 로컬 서버를 띄워 실서비스 통합 테스트 (CORS·검색·봉·오류·캐시) |
-
-```bash
-deno test --allow-read supabase/functions/stock-bars/            # 단위 16개
-deno test --allow-net --allow-read supabase/functions/stock-bars/live_test.ts  # 실서비스 1개 세트
-PORT=8790 deno run --allow-net --allow-env supabase/functions/stock-bars/index.ts  # 로컬 중계
-```
-
-### API
-
-| 요청 | 응답 |
-| --- | --- |
-| `GET ?q=삼성전자` / `?q=TSLA` / `?q=005930` | `{ok,kind:"search",results:[{code,name,market,symbol,currency,priceUnit,exchange,type,source}],sources}` |
-| `GET ?symbol=005930.KS` | `{ok,kind:"bars",symbol,name,market,currency,priceUnit,exchangeTimezone,meta,times,sessions:[{date,bars:[[o,h,l,c,v],…]}]}` |
-| `GET ?code=005930&market=KR` | 위와 같음 (시장을 모르면 `.KS`→`.KQ` 순으로 시도) |
-| `GET ?health=1` | 버전·시각 |
-| 오류 | `{ok:false,kind:"error",error:{code,message}}` + HTTP 400/404/422/429/502/504 |
-
-배포:
-
-```bash
-supabase link --project-ref ntfhdiujapctomzzaifu
-supabase functions deploy stock-bars --no-verify-jwt   # 공개 중계라 JWT 검증을 끈다 (비밀키 없음)
-```
-
-`supabase/functions/stock-bars/DEPLOY.md` 에 그대로 따라 할 수 있는 절차를 적어 두었습니다.
+- **동작 줄이기**: 기기에서 `prefers-reduced-motion: reduce` 를 켜면 결과로 이동할 때 부드러운 스크롤 대신
+  애니메이션 없이 바로 이동합니다(시뮬레이션 후·리포트 열기 두 곳).
+- **메타 설명**: `index.html` 의 `description`·`og:description` 에서 “실시간 5분봉”을 빼고, 가상 체험·내 CSV·
+  내 API 키라는 실제 기능으로 적었습니다.
+- **정리**: 화면에서 쓰지 않던 `StockSearch.tsx`·`stockApi.ts`·`supabase/functions/stock-bars/` 를 삭제했습니다.
 
 ## 엔진 (참고 구현과의 대응)
 
@@ -184,7 +172,7 @@ CSV/텍스트 붙여넣기 또는 파일(.csv/.txt/.json) 업로드.
 
 상단 **[1. 시뮬레이터] / [2. 최종 해석 리포트]** 두 탭.
 
-- 입력: 내장 5종목 · 내 데이터(CSV/JSON), **가정할 포지션**(매수/매도),
+- 입력: 가상 체험 5종목 · 내 데이터(CSV/JSON) · 내 API 키로 불러온 종목(BYOK, v2.3.1), **가정할 포지션**(매수/매도),
   **예시 입력값(가상)** 진입·손절·목표가, 손익비 프리셋(1R/1.5R/2R), 진입 시각, 계좌 금액, 1회 허용 손실률.
   1만 회 재생이 끝나면 결과 위에 **5초 요약 배너 + [쉬운 해석 보러가기]** 가 뜹니다.
 - 결과: **데이터 기준일·수집 시각·출처** 1줄 병기 + 목표/손절/미도달 3칸 확률 +
@@ -241,13 +229,8 @@ v2.1.3에서는 각주에 **포지션 방향과 실제 사용한 평균 R**을 �
 
 `내 데이터 직접 입력` 을 고르고 아직 [적용하기]를 누르지 않았으면 이전 종목으로 계산하지 않고
 실행 버튼을 잠그며 `먼저 차트 데이터를 입력하고 [적용하기]를 눌러주세요` 를 표시합니다.
-CSV/JSON은 브라우저 안에서만 처리되고 외부로 전송되지 않습니다(v2.3.0부터 앱은 어떤 시세 서버도 부르지 않습니다).
-
-## 실시간 검색 상태 안내 (v2.1.1 → v2.3.0 제외)
-
-v2.1.1에서 실시간 검색 영역 위에 `서버 토큰 연동 대기 중 — 현재는 내장 5종목·CSV/JSON 즉시 사용 가능` 배지를 늘 표시했고,
-`VITE_STOCK_API_URL` 이 지정되면 `?health=1` 로 한 번 확인해 `실시간 시세 서버 연결됨` 으로 바꿨습니다.
-**v2.3.0에서 이 영역 자체를 화면에서 제거**했으므로 상태 확인 요청도 나가지 않습니다.
+CSV/JSON은 브라우저 안에서만 처리되고 외부로 전송되지 않습니다. v2.3.1부터는 방문자가 **자기 API 키**를 넣은 경우에만
+브라우저가 시세 제공처(`api.twelvedata.com`)에 직접 요청하며, 그때도 키·데이터는 이 사이트 서버로 가지 않습니다.
 
 ## 배포
 
@@ -257,6 +240,7 @@ v2.1.1에서 실시간 검색 영역 위에 `서버 토큰 연동 대기 중 —
 
 ## 검증 리포트
 
+- `reports/trade-timemachine/v2.3.1/` — v2.3.1(본인 API 키 BYOK 4단계 가이드·가상 체험 5종 내장·Yahoo 원시 파일/중계 코드 삭제·메타 설명 정정·prefers-reduced-motion·단위 테스트 107개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v2.3.0/` — v2.3.0(모바일 헤더 복구(390/360 제목 1줄)·실시간 검색 제외(`stock-bars` 요청 0건)·100종목 미내장 사유와 약관 근거·단위 테스트 94개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v1/` — 1단계(엔진·파리티·Playwright)
 - `reports/trade-timemachine/v2/` — 2단계(실시간 검색·실서비스 함수 테스트·모바일·라이브 URL)

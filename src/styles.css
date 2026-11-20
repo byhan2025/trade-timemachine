@@ -2393,3 +2393,291 @@ a:focus-visible {
     font-size: 13.5px;
   }
 }
+
+/* ---------------------------------------------------------------- BYOK (v2.3.1)
+   방문자 본인 API 키 입력 + 4단계 가이드. 접힌 상태에서는 한 줄 버튼만 보인다. */
+.byok {
+  border: 1px solid #d7e2f5;
+  border-radius: 14px;
+  background: #f8fbff;
+  margin: 4px 0 16px;
+  overflow: hidden;
+}
+
+.byok-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.byok-toggle:hover {
+  background: #eff5ff;
+}
+
+.byok-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.byok-toggle-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #16348c;
+  word-break: keep-all;
+}
+
+.byok-chevron {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand);
+  white-space: nowrap;
+}
+
+.byok-body {
+  padding: 4px 12px 14px;
+  border-top: 1px dashed #cfdcf3;
+}
+
+.byok-intro {
+  margin: 10px 0 12px;
+  font-size: 13px;
+  color: #33415c;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.byok-guide {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  counter-reset: none;
+}
+
+.byok-guide > li {
+  border: 1px solid #dfe8f7;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.byok-guide h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+.byok-step-no {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.byok-guide p {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  color: #33415c;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.byok-guide code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: #eef3ff;
+  color: #1e3a8a;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.guide-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 2px 0 6px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #e7efff;
+  color: #16348c;
+  font-size: 12.5px;
+  font-weight: 800;
+  text-decoration: none;
+  word-break: keep-all;
+}
+
+.guide-link:hover {
+  background: #d9e6ff;
+}
+
+.byok-facts {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+  word-break: keep-all;
+}
+
+.byok-substeps {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: #33415c;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+.byok-substeps li {
+  margin-bottom: 4px;
+}
+
+.byok-form {
+  border-top: 1px solid #e3eaf3;
+  padding-top: 10px;
+}
+
+.byok-key-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.byok-key-row .control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.btn.ghost {
+  width: auto;
+  min-width: 68px;
+  min-height: 48px;
+  padding: 0 12px;
+  background: #eef3ff;
+  color: #1e3a8a;
+  font-size: 13.5px;
+}
+
+.byok-hint {
+  margin: 6px 0 0;
+}
+
+.byok-load {
+  margin-top: 2px;
+}
+
+.remember {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border: 1px solid #cfd9e6;
+  border-radius: 12px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-align: left;
+  cursor: pointer;
+  word-break: keep-all;
+}
+
+.remember.on {
+  border-color: #93b4f5;
+  background: #eff5ff;
+}
+
+.remember-knob {
+  flex: 0 0 auto;
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background 0.15s;
+}
+
+.remember-knob::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s;
+}
+
+.remember.on .remember-knob {
+  background: var(--brand);
+}
+
+.remember.on .remember-knob::after {
+  transform: translateX(18px);
+}
+
+.byok-privacy {
+  margin-top: 8px;
+}
+
+.alert.ok {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.synthetic-note {
+  margin: 10px 0 14px;
+}
+
+.synthetic-badge {
+  background: #fff7e6;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.live-badge {
+  background: #eef3ff;
+  color: #1e3a8a;
+  border: 1px solid #c7d7fb;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .remember-knob,
+  .remember-knob::after {
+    transition: none;
+  }
+}

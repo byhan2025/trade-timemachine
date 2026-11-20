@@ -8,9 +8,23 @@ function when(value: string): string {
 
 export function DataNote({ dataset, warnings }: { dataset: Dataset; warnings: string[] }) {
   const m = dataset.meta;
+  const synthetic = !!dataset.synthetic;
+  const live = !!dataset.live;
   return (
     <section className="card data-note">
-      <h3 className="card-title">데이터 출처 · 기준</h3>
+      <div className="card-head">
+        <h3 className="card-title">데이터 출처 · 기준</h3>
+        {synthetic && (
+          <span className="badge strong synthetic-badge" data-testid="synthetic-badge">
+            가상 체험 데이터
+          </span>
+        )}
+        {live && (
+          <span className="badge strong live-badge" data-testid="live-badge">
+            내 API 키로 조회
+          </span>
+        )}
+      </div>
       <dl className="kv compact">
         <div>
           <dt>데이터</dt>
@@ -24,7 +38,7 @@ export function DataNote({ dataset, warnings }: { dataset: Dataset; warnings: st
           <dd>{m.source}</dd>
         </div>
         <div>
-          <dt>{dataset.custom ? "적용 시각" : "수집 기준일"}</dt>
+          <dt>{dataset.custom ? "적용 시각" : live ? "조회 시각" : "생성 기준일"}</dt>
           <dd>{when(m.fetchedAt)}</dd>
         </div>
         <div>
@@ -62,10 +76,22 @@ export function DataNote({ dataset, warnings }: { dataset: Dataset; warnings: st
           </a>
         </p>
       )}
-      <p className="footnote noncommercial">
-        이 앱은 <strong>개인 연구·참고용 비상업 통계 도구</strong>입니다. 위 공개 시세를 그대로 보여줄 뿐
-        매매 신호·투자 권유가 아니며, 시세 데이터의 재배포나 상업적 이용을 목적으로 하지 않습니다.
-      </p>
+      {synthetic ? (
+        <p className="footnote noncommercial" data-testid="synthetic-disclaimer">
+          이 화면의 데이터는 <strong>저작권·약관 문제가 없는 가상 생성 통계 예시</strong>입니다. 실제
+          종목·실제 시세와 무관하며, 매매 신호·투자 권유가 아닙니다. 개인 연구·참고용 비상업 도구입니다.
+        </p>
+      ) : live ? (
+        <p className="footnote noncommercial" data-testid="live-disclaimer">
+          방문자가 자기 API 키로 직접 받은 데이터입니다. 이 사이트는 데이터를 저장·재배포하지 않고 화면
+          계산에만 쓰며, 매매 신호·투자 권유가 아닙니다. 개인 연구·참고용 비상업 도구입니다.
+        </p>
+      ) : (
+        <p className="footnote noncommercial">
+          이 앱은 <strong>개인 연구·참고용 비상업 통계 도구</strong>입니다. 위 데이터를 그대로 보여줄 뿐
+          매매 신호·투자 권유가 아니며, 데이터의 재배포나 상업적 이용을 목적으로 하지 않습니다.
+        </p>
+      )}
       {warnings.length > 0 && (
         <ul className="warn-list">
           {warnings.map((w) => (

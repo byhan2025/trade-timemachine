@@ -92,6 +92,28 @@ export {
 } from "../src/lib/easy";
 export { TopBar } from "../src/components/TopBar";
 export { APP_VERSION, VERSION_SHORT, VERSION_NOTE } from "../src/lib/version";
+export {
+  BYOK_MAX_BARS,
+  BYOK_MIN_SESSIONS,
+  BYOK_STORAGE_KEY,
+  ByokError,
+  TD_KEYS_URL,
+  TD_REGISTER_URL,
+  TD_TIME_SERIES,
+  buildTimeSeriesUrl,
+  clearStoredKey,
+  datasetFromTwelveData,
+  errorFromResponse,
+  loadStoredKey,
+  looksKoreanTicker,
+  messageFor,
+  normalizeSymbol,
+  redactKey,
+  saveStoredKey,
+  sessionGrid,
+  unitForCurrency,
+} from "../src/lib/byok";
+export { prefersReducedMotion, scrollBehavior } from "../src/lib/motion";
 export { ResultCards } from "../src/components/ResultCards";
 export { SizingCard, isExtremeStop } from "../src/components/SizingCard";
 export { ComboTable } from "../src/components/ComboTable";

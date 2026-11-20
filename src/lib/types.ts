@@ -47,6 +47,8 @@ export interface Dataset {
   custom?: boolean;
   /** 실시간 중계 서버에서 받은 데이터인지 */
   live?: boolean;
+  /** 가상 생성(합성) 체험 데이터인지 — 저작권·약관 쟁점 없는 예시 (v2.3.1) */
+  synthetic?: boolean;
 }
 
 export interface SampleIndexItem {

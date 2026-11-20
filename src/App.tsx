@@ -15,7 +15,9 @@ import { BacktestCard } from "./components/BacktestCard";
 import { DataNote } from "./components/DataNote";
 import { ReportView } from "./components/ReportView";
 import { TopBar } from "./components/TopBar";
+import { ApiKeyPanel } from "./components/ApiKeyPanel";
 import { APP_VERSION } from "./lib/version";
+import { prefersReducedMotion, scrollBehavior } from "./lib/motion";
 
 const BASE = import.meta.env.BASE_URL || "/";
 const REPLAYS = 10000;
@@ -35,7 +37,8 @@ export default function App() {
   const [customBusy, setCustomBusy] = useState(false);
   /** [적용하기]를 통과해 실제로 계산에 쓸 수 있는 커스텀 데이터 */
   const [customDataset, setCustomDataset] = useState<Dataset | null>(null);
-
+  /** 방문자가 자기 API 키로 불러온 데이터 (v2.3.1 BYOK) */
+  const [byokDataset, setByokDataset] = useState<Dataset | null>(null);
   const [side, setSide] = useState<Side>("buy");
   const [entry, setEntry] = useState("");
   const [stop, setStop] = useState("");
@@ -59,7 +62,7 @@ export default function App() {
         setIndex(data);
         if (data.items.length) setDatasetId(data.items[0].id);
       })
-      .catch(() => setLoadError("내장 샘플 데이터를 불러오지 못했습니다. `npm run samples`로 데이터를 생성하세요."));
+      .catch(() => setLoadError("내장 가상 체험 데이터를 불러오지 못했습니다. `npm run samples`로 데이터를 생성하세요."));
   }, []);
 
   const applyDefaults = useCallback((d: Dataset) => {
@@ -79,7 +82,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!datasetId || datasetId === "custom") return;
+    if (!datasetId || datasetId === "custom" || datasetId === "byok") return;
     let alive = true;
     fetch(`${BASE}samples/${datasetId}.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(datasetId))))
@@ -122,6 +125,20 @@ export default function App() {
     [applyDefaults]
   );
 
+  /** 내 API 키로 불러온 데이터를 화면 데이터로 채택 */
+  const applyByok = useCallback(
+    (d: Dataset) => {
+      setByokDataset(d);
+      setDataset(d);
+      setDatasetId("byok");
+      setCustomWarnings([]);
+      setRun(null);
+      setError(null);
+      applyDefaults(d);
+    },
+    [applyDefaults]
+  );
+
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     const text = await file.text();
@@ -154,6 +171,12 @@ export default function App() {
       setDataset(customDataset);
       setDatasetId("custom");
       setCustomWarnings(customDataset ? customWarnings : []);
+      return;
+    }
+    if (next === "byok") {
+      setDataset(byokDataset);
+      setDatasetId("byok");
+      setCustomWarnings([]);
       return;
     }
     setDatasetId(next);
@@ -243,7 +266,11 @@ export default function App() {
         });
         setTab("sim");
         window.setTimeout(() => {
-          resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          // 동작 줄이기(prefers-reduced-motion)를 켠 방문자는 애니메이션 없이 바로 이동 (v2.3.1)
+          resultsRef.current?.scrollIntoView({
+            behavior: scrollBehavior(prefersReducedMotion()),
+            block: "start",
+          });
         }, 60);
       } catch (e) {
         setError(e instanceof Error ? e.message : "시뮬레이션에 실패했습니다.");
@@ -282,7 +309,7 @@ export default function App() {
 
   const openReport = () => {
     setTab("report");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: scrollBehavior(prefersReducedMotion()) });
   };
 
   const remaining = dataset ? dataset.times.length - 1 - entryBar : 0;
@@ -346,7 +373,7 @@ export default function App() {
 
             <label className="field">
               <span className="field-label">
-                내장 샘플 종목 · 내 데이터 <span className="muted small">(로그인·서버 없이 바로 사용)</span>
+                종목 데이터 선택 <span className="muted small">(가상 체험 5종 · 내 CSV · 내 API 키)</span>
               </span>
               <select
                 className="control"
@@ -359,14 +386,30 @@ export default function App() {
                     {s.name} ({s.symbol}) · {s.sessions}일 · {s.sessionBars}봉
                   </option>
                 ))}
+                {byokDataset && (
+                  <option value="byok">
+                    내 API 키: {byokDataset.symbol} · {byokDataset.meta.sessionsUsed}일 ·{" "}
+                    {byokDataset.meta.sessionBars}봉
+                  </option>
+                )}
                 <option value="custom">내 데이터 직접 입력 (CSV/JSON)</option>
               </select>
             </label>
 
             <p className="privacy-note" data-testid="privacy-note">
-              CSV·JSON 붙여넣기/업로드는 브라우저 안에서만 처리되며 외부로 전송되지 않습니다. 이 앱은 시세
-              서버를 호출하지 않고, 내장 데이터와 내 파일만으로 계산합니다.
+              내장 가상 체험 데이터와 내 파일은 브라우저 안에서만 처리되고 외부로 전송되지 않습니다. 아래에서
+              내 API 키를 넣은 경우에만 <strong>내 브라우저가 시세 제공처에 직접</strong> 요청하며, 키와
+              데이터는 이 사이트 서버로 보내지 않습니다.
             </p>
+
+            {dataset?.synthetic && (
+              <p className="alert warn small synthetic-note" role="note" data-testid="synthetic-note">
+                지금 고른 데이터는 <strong>실제 시세가 아닌 가상 생성 통계 예시</strong>입니다. 저작권·약관
+                문제가 없도록 무작위로 만든 패턴이라 실제 종목의 과거 흐름과 다릅니다.
+              </p>
+            )}
+
+            <ApiKeyPanel onApply={applyByok} />
 
             {datasetId === "custom" && (
               <div className="custom-box">
@@ -740,8 +783,8 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v{APP_VERSION} · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance 공개
-          시세 · 투자 자문 아님
+          한국형 타임머신 시뮬레이터 v{APP_VERSION} · 가상 체험 5분봉 또는 내 데이터·내 API 키 · 투자
+          자문 아님
         </p>
         <p>
           개인 연구·참고용 <strong>비상업 통계 도구</strong>입니다. 시세를 매매 신호나 투자 권유로

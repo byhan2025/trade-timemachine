@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import {
   parseCustom,
   buildPool,
@@ -87,6 +87,27 @@ import {
   APP_VERSION,
   VERSION_SHORT,
   TopBar,
+  BYOK_MAX_BARS,
+  BYOK_MIN_SESSIONS,
+  BYOK_STORAGE_KEY,
+  ByokError,
+  TD_KEYS_URL,
+  TD_REGISTER_URL,
+  TD_TIME_SERIES,
+  buildTimeSeriesUrl,
+  clearStoredKey,
+  datasetFromTwelveData,
+  errorFromResponse,
+  loadStoredKey,
+  looksKoreanTicker,
+  messageFor,
+  normalizeSymbol,
+  redactKey,
+  saveStoredKey,
+  sessionGrid,
+  unitForCurrency,
+  scrollBehavior,
+  prefersReducedMotion,
 } from "./.build/lib.mjs";
 
 /* ---------------------------------------------------------------- helpers */
@@ -1985,17 +2006,17 @@ test("v2.2.4 배선: 배너·결과 카드·리포트가 같은 퍼센트 표기
   assert.match(combo, /실제 \{easyTargetMultiple\(cell\.actualR\)\}/);
 });
 
-test("v2.3.0 버전 표기: package.json·version.ts·배지·푸터·README 가 같은 버전을 가리킨다", () => {
+test("v2.3.1 버전 표기: package.json·version.ts·배지·푸터·README 가 같은 버전을 가리킨다", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(pkg.version, APP_VERSION);
-  assert.equal(APP_VERSION, "2.3.0");
+  assert.equal(APP_VERSION, "2.3.1");
   // 배지는 짧은 v2.3 만 (긴 설명은 title 속성으로)
   assert.equal(VERSION_SHORT, "2.3");
   const app = readFileSync("src/App.tsx", "utf8");
   assert.match(app, /한국형 타임머신 시뮬레이터 v\{APP_VERSION\}/);
   assert.match(app, /import \{ APP_VERSION \} from "\.\/lib\/version"/);
   const readme = readFileSync("README.md", "utf8");
-  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.3\.0\)/);
+  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.3\.1\)/);
 });
 
 /* ================================================================ v2.3.0 모바일 헤더 복구 · 실시간 검색 제외 */
@@ -2063,12 +2084,12 @@ test("v2.3.0 실시간 검색 제외: stock-bars 를 부르는 UI·상태가 앱
   ]) {
     assert.ok(!app.includes(gone), `App.tsx 에 ${gone} 가 남아 있다`);
   }
-  // 남은 입력 경로는 내장 종목 + CSV/JSON 뿐
-  assert.ok(app.includes("내장 샘플 종목 · 내 데이터"));
+  // 남은 입력 경로는 가상 체험 종목 + 내 CSV + (v2.3.1) 내 API 키
+  assert.ok(app.includes("종목 데이터 선택"));
   assert.ok(app.includes("<option value=\"custom\">내 데이터 직접 입력 (CSV/JSON)</option>"));
   assert.ok(!app.includes("<option value=\"live\">"));
-  // 개인정보 안내도 실시간 전송 문구를 더 이상 말하지 않는다
-  assert.ok(app.includes("이 앱은 시세\n              서버를 호출하지 않고"));
+  // 개인정보 안내: 내 파일·가상 데이터는 브라우저 안에서만, API 키는 제공처로만
+  assert.ok(app.includes("내장 가상 체험 데이터와 내 파일은 브라우저 안에서만 처리되고"));
   // 다른 화면(리포트·컴포넌트)에서도 stock-bars 호출이 없다
   for (const f of readdirSync("src/components").map((x) => `src/components/${x}`)) {
     const text = readFileSync(f, "utf8");
@@ -2288,4 +2309,293 @@ test("v2.2.5 결함3: 조합표 클릭 칸이 화면 판독기에 버튼으로 �
   assert.match(src, /<button\s+type="button"/);
   assert.match(src, /onClick=\{\(\) => setPicked\(key\)\}/);
   assert.doesNotMatch(src, /onKeyDown/);
+});
+
+/* ================================================================ v2.3.1 본인 API 키(BYOK) · 가상 체험 데이터 · 접근성 */
+
+/** Twelve Data 응답 모양 그대로 — 4일 × 3봉 + 마지막 날 2봉(진행 중) */
+function tdBody({ days = 4, barsPerDay = 3 } = {}) {
+  const times = ["09:30", "09:35", "09:40"].slice(0, barsPerDay);
+  const values = [];
+  for (let d = 0; d < days; d++) {
+    const n = d === days - 1 ? 2 : times.length;
+    for (let b = 0; b < n; b++) {
+      const o = 100 + d + b / 10;
+      values.push({
+        datetime: `2026-11-0${d + 1} ${times[b]}:00`,
+        open: o.toFixed(2),
+        high: (o + 1).toFixed(2),
+        low: (o - 1).toFixed(2),
+        close: (o + 0.5).toFixed(2),
+        volume: "1000",
+      });
+    }
+  }
+  return {
+    meta: {
+      symbol: "AAPL",
+      interval: "5min",
+      currency: "USD",
+      exchange: "NASDAQ",
+      exchange_timezone: "America/New_York",
+      type: "Common Stock",
+    },
+    values: values.reverse(),
+    status: "ok",
+  };
+}
+
+function kindOf(fn) {
+  try {
+    fn();
+    return "no-error";
+  } catch (e) {
+    return e instanceof Error ? e.name + ":" + e.kind : "other";
+  }
+}
+
+test("v2.3.1 BYOK ①: 요청 URL 은 5분봉·내 키·최대 5000봉이고 티커는 정리된다", () => {
+  const url = buildTimeSeriesUrl(" aapl ", " KEY123 ");
+  assert.ok(url.startsWith(TD_TIME_SERIES + "?"));
+  assert.ok(url.includes("symbol=AAPL"));
+  assert.ok(url.includes("interval=5min"));
+  assert.ok(url.includes("outputsize=" + BYOK_MAX_BARS));
+  assert.ok(url.includes("apikey=KEY123"));
+  assert.equal(BYOK_MAX_BARS, 5000);
+  // 무료 플랜 한도·가입 주소는 화면 가이드와 같은 값
+  assert.ok(TD_REGISTER_URL.startsWith("https://twelvedata.com/"));
+  assert.ok(TD_KEYS_URL.includes("api-keys"));
+  assert.equal(normalizeSymbol(" 005930.ks "), "005930.KS");
+});
+
+test("v2.3.1 BYOK ②: 한국 티커 판별 — 6자리 코드·.KS/.KQ/.KRX, 미국 티커는 아님", () => {
+  for (const k of ["005930", "005930.KS", "005930.KQ", " 005930.krx "]) {
+    assert.ok(looksKoreanTicker(k), k);
+  }
+  for (const k of ["AAPL", "TSLA", "BRK-B", "00593"]) {
+    assert.ok(!looksKoreanTicker(k), k);
+  }
+});
+
+test("v2.3.1 BYOK ③: 응답 → Dataset — 완전한 세션만, 진행 중 하루는 제외, 5분봉·출처 기록", () => {
+  const d = datasetFromTwelveData(tdBody(), "AAPL", "2026-11-20T10:00:00.000Z");
+  assert.deepEqual(d.times, ["09:30", "09:35", "09:40"]);
+  assert.equal(d.sessions.length, 3);
+  assert.equal(d.meta.sessionsUsed, 3);
+  assert.equal(d.meta.sessionBars, 3);
+  assert.equal(d.meta.intervalSeconds, 300);
+  assert.equal(d.meta.interval, "5분봉");
+  assert.equal(d.meta.sessionStart, "09:30");
+  assert.equal(d.meta.sessionEnd, "09:40");
+  assert.equal(d.meta.sessionsDropped[0].date, "2026-11-04");
+  assert.equal(d.live, true);
+  assert.equal(d.symbol, "AAPL");
+  assert.equal(d.market, "NASDAQ");
+  assert.equal(d.priceUnit, "USD");
+  assert.match(d.meta.source, /내 API 키/);
+  assert.equal(d.meta.fetchedAt, "2026-11-20T10:00:00.000Z");
+  // 봉은 [시가, 고가, 저가, 종가, 거래량] 순서
+  assert.equal(d.sessions[0].bars[0].length, 5);
+  assert.ok(d.sessions[0].bars[0][1] >= Math.max(d.sessions[0].bars[0][0], d.sessions[0].bars[0][3]));
+  assert.equal(unitForCurrency("KRW"), "원");
+  assert.equal(unitForCurrency("USD"), "USD");
+});
+
+test("v2.3.1 BYOK ④: 세션 격자는 최빈 봉 수·최빈 시작/끝으로 만들고 어긋난 날은 버린다", () => {
+  const full = [];
+  for (let m = 9 * 60 + 30; m <= 15 * 60 + 55; m += 5) {
+    full.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  }
+  assert.equal(full.length, 78);
+  const short = full.slice(0, 20);
+  const g = sessionGrid([full, short, full]);
+  assert.ok(g);
+  assert.equal(g.times.length, 78);
+  assert.equal(g.times[0], "09:30");
+  assert.equal(g.times[77], "15:55");
+  assert.equal(g.stepMinutes, 5);
+  // 봉 수가 같은데 시작·끝이 다르면 최빈 조합을 쓴다
+  const late = full.slice(1);
+  const g2 = sessionGrid([full, full, late]);
+  assert.equal(g2.times.length, 78);
+  assert.equal(g2.times[0], "09:30");
+  assert.equal(sessionGrid([["09:00"], ["09:00"]]), null);
+});
+
+test("v2.3.1 BYOK ⑤: 오류는 종류별로 나뉜다 — 잘못된 키·플랜·한도·티커·서버", () => {
+  assert.equal(errorFromResponse(401, { code: 401 }).kind, "key");
+  assert.equal(errorFromResponse(403, {}).kind, "plan");
+  assert.equal(errorFromResponse(429, { code: 429 }).kind, "limit");
+  assert.equal(errorFromResponse(404, {}).kind, "symbol");
+  assert.equal(errorFromResponse(500, {}).kind, "server");
+  // 본문 code 가 HTTP 상태보다 우선한다(제공처가 200+code 로도 돌려준다)
+  assert.equal(errorFromResponse(200, { code: 401 }).kind, "key");
+  assert.match(messageFor("limit"), /1분에 8회, 하루 800회/);
+  assert.match(messageFor("plan"), /한국 종목/);
+  assert.match(messageFor("key"), /API 키/);
+  // 화면에 그대로 쓰이는 문구는 키를 되돌려 주지 않는다
+  assert.equal(redactKey("bad KEY123 rejected", "KEY123"), "bad *** rejected");
+  assert.equal(redactKey("no key here", "KEY123"), "no key here");
+});
+
+test("v2.3.1 BYOK ⑥: 빈 응답·2일뿐인 응답은 계산하지 않고 이유를 알려 준다", () => {
+  assert.equal(kindOf(() => datasetFromTwelveData({ status: "error", code: 401 }, "AAPL")), "ByokError:key");
+  assert.equal(kindOf(() => datasetFromTwelveData({ values: [] }, "AAPL")), "ByokError:symbol");
+  assert.equal(kindOf(() => datasetFromTwelveData(tdBody({ days: 2 }), "AAPL")), "ByokError:session");
+  // 고가<저가처럼 값이 어긋난 봉은 조용히 쓰지 않고 제외한다
+  const broken = tdBody();
+  broken.values = broken.values.map((v, i) =>
+    i === 0 ? { ...v, high: String(Number(v.low) - 5) } : v
+  );
+  const d = datasetFromTwelveData(broken, "AAPL");
+  assert.ok(d.meta.sessionsUsed >= 3);
+  assert.match(d.meta.note, /제외한 봉/);
+});
+
+test("v2.3.1 BYOK ⑦: 키 보관은 메모리 기본·localStorage 선택 — 망가진 저장소에서도 앱이 죽지 않는다", () => {
+  const mem = new Map();
+  const store = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: (k) => mem.delete(k),
+  };
+  assert.equal(loadStoredKey(store), "");
+  assert.equal(saveStoredKey(store, " KEY123 "), true);
+  assert.equal(loadStoredKey(store), "KEY123");
+  assert.ok(BYOK_STORAGE_KEY.startsWith("ttm.byok."));
+  clearStoredKey(store);
+  assert.equal(loadStoredKey(store), "");
+  // 사파리 비공개 모드처럼 던지는 저장소
+  const angry = {
+    getItem() {
+      throw new Error("denied");
+    },
+    setItem() {
+      throw new Error("denied");
+    },
+    removeItem() {
+      throw new Error("denied");
+    },
+  };
+  assert.equal(loadStoredKey(angry), "");
+  assert.equal(saveStoredKey(angry, "K"), false);
+  clearStoredKey(angry);
+  assert.equal(loadStoredKey(null), "");
+});
+
+test("v2.3.1 접근성 ①: prefers-reduced-motion 이면 부드러운 스크롤 대신 즉시 이동", () => {
+  assert.equal(scrollBehavior(true), "auto");
+  assert.equal(scrollBehavior(false), "smooth");
+  const app = readFileSync("src/App.tsx", "utf8");
+  // 결과로 이동하는 두 곳(시뮬레이션 후·리포트 열기) 모두 설정을 존중한다
+  assert.equal([...app.matchAll(/behavior: scrollBehavior\(prefersReducedMotion\(\)\)/g)].length, 2);
+  assert.ok(!/behavior:\s*["']smooth["']/.test(app), "smooth 리터럴이 남아 있다");
+  assert.match(readFileSync("src/lib/motion.ts", "utf8"), /prefers-reduced-motion: reduce/);
+  assert.equal(typeof prefersReducedMotion(), "boolean");
+});
+
+test("v2.3.1 가이드 UI: 4단계 안내·키 보기/가리기·저장 스위치·개인정보 안내가 한 컴포넌트에 있다", () => {
+  const src = readFileSync("src/components/ApiKeyPanel.tsx", "utf8");
+  for (const text of [
+    "무료 API 키 발급 사이트 열기",
+    "내 API 키 복사하기",
+    "아래 칸에 붙여넣고 [데이터 불러오기]",
+    "한국 종목은 증권사 HTS 5분봉 CSV로",
+    "무료 한도 1회",
+    "우리 서버로 전송되지 않습니다",
+  ]) {
+    assert.ok(src.includes(text), text);
+  }
+  assert.ok(src.includes("aria-expanded={open}"));
+  assert.ok(src.includes('aria-controls="byok-body"'));
+  assert.ok(src.includes('role="switch"'));
+  assert.ok(src.includes('aria-checked={remember}'));
+  assert.ok(src.includes('type={showKey ? "text" : "password"}'));
+  // 키가 갈 수 있는 주소는 제공처(base) 하나뿐 — 사이트 서버·다른 곳으로 보내는 fetch 가 없다
+  assert.ok(src.includes("buildTimeSeriesUrl("));
+  assert.ok(!/https?:\/\//.test(src), "ApiKeyPanel 에 하드코딩한 외부 주소가 있다");
+  assert.ok(!src.includes("console.log"));
+});
+
+test("v2.3.1 앱 배선: 내 API 키 데이터가 선택 목록에 추가되고 가상 체험 고지가 화면에 있다", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  assert.ok(app.includes("<ApiKeyPanel onApply={applyByok} />"));
+  assert.ok(app.includes('<option value="byok">'));
+  assert.ok(app.includes('datasetId === "byok"'));
+  assert.ok(app.includes('data-testid="synthetic-note"'));
+  assert.ok(app.includes("가상 생성 통계 예시"));
+  assert.ok(app.includes("키와\n                데이터는 이 사이트 서버로 보내지 않습니다") || app.includes("이 사이트 서버로 보내지 않습니다"));
+  // 푸터가 Yahoo·실시간을 말하지 않는다
+  const footer = app.slice(app.indexOf('<footer className="footer">'));
+  assert.ok(!footer.includes("Yahoo"));
+  assert.ok(!footer.includes("실시간"));
+  const note = readFileSync("src/components/DataNote.tsx", "utf8");
+  assert.ok(note.includes('data-testid="synthetic-badge"'));
+  assert.ok(note.includes('data-testid="live-badge"'));
+  assert.ok(note.includes("가상 생성 통계 예시"));
+});
+
+test("v2.3.1 메타 설명: '실시간 5분봉' 문구가 사라지고 og:description 이 실제 기능과 맞는다", () => {
+  const html = readFileSync("index.html", "utf8");
+  const desc = /<meta\s+name="description"\s+content="([^"]*)"/s.exec(html);
+  assert.ok(desc, "meta description 없음");
+  assert.ok(!desc[1].includes("실시간"), "description 에 '실시간' 이 남아 있다");
+  const og = /<meta\s+property="og:description"\s+content="([^"]*)"/s.exec(html);
+  assert.ok(og, "og:description 없음");
+  assert.ok(!og[1].includes("실시간"));
+  assert.match(og[1], /가상 체험|API 키/);
+  assert.match(desc[1], /API 키|가상 체험/);
+  assert.ok(!html.includes("실시간 5분봉"));
+});
+
+test("v2.3.1 내장 데이터는 가상 생성 5종 — 실제 시세 파일·Yahoo 흔적 0", () => {
+  const files = readdirSync("public/samples").sort();
+  assert.deepEqual(files, [
+    "SYN-BOX.json",
+    "SYN-REBOUND.json",
+    "SYN-STABLE.json",
+    "SYN-THEME.json",
+    "SYN-UPTREND.json",
+    "index.json",
+  ]);
+  const index = JSON.parse(readFileSync("public/samples/index.json", "utf8"));
+  assert.equal(index.items.length, 5);
+  assert.match(index.source, /가상 생성/);
+  assert.ok(!JSON.stringify(index).includes("Yahoo"));
+  for (const item of index.items) {
+    assert.match(item.name, /^\[가상 체험\]/);
+    assert.match(item.symbol, /^SYN-/);
+    const d = JSON.parse(readFileSync(`public/samples/${item.file}`, "utf8"));
+    assert.equal(d.synthetic, true);
+    assert.match(d.meta.source, /가상 생성/);
+    assert.match(d.meta.source, /실제 시세 아님/);
+    assert.ok(!JSON.stringify(d).includes("Yahoo"));
+    assert.equal(d.sessions.length, item.sessions);
+    assert.ok(d.sessions.length >= 40);
+    assert.equal(d.times.length, item.sessionBars);
+    for (const s of d.sessions) {
+      assert.equal(s.bars.length, d.times.length);
+      for (const [o, h, l, c, v] of s.bars) {
+        assert.ok(o > 0 && h > 0 && l > 0 && c > 0);
+        assert.ok(h >= Math.max(o, c) && l <= Math.min(o, c), `${item.symbol} ${s.date} OHLC`);
+        assert.ok(v >= 0);
+      }
+    }
+  }
+});
+
+test("v2.3.1 정리: 구버전 StockSearch·stockApi·stock-bars 중계 코드가 저장소에서 사라졌다", () => {
+  assert.equal(existsSync("src/components/StockSearch.tsx"), false);
+  assert.equal(existsSync("src/lib/stockApi.ts"), false);
+  assert.equal(existsSync("supabase"), false);
+  assert.equal(existsSync("scripts/fetch_samples.py"), false);
+  for (const f of [...readdirSync("src/components"), ...readdirSync("src/lib")]) {
+    const path = f.endsWith(".tsx") ? `src/components/${f}` : `src/lib/${f}`;
+    if (!path.endsWith(".ts") && !path.endsWith(".tsx")) continue;
+    const text = readFileSync(path, "utf8");
+    assert.ok(!text.includes("stockApi"), path);
+  }
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  assert.match(pkg.scripts.samples, /make_synthetic_samples\.py/);
+  assert.equal(pkg.scripts["test:api"], undefined);
 });
