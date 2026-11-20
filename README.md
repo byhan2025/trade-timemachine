@@ -91,13 +91,13 @@ npm test             # 프론트엔드 단위 테스트 94개 (esbuild 번들 + 
 
 | 소스 | 확인한 약관 | 재배포 |
 | --- | --- | --- |
-| Yahoo Finance (Chart v8) | Yahoo 약관: 사전 서면 허용 없이 서비스의 일부를 **복제·배포·전송**할 수 없고, 상업적 목적 사용·자동 수집에 사전 허락 필요 | ✗ |
+| Yahoo Finance (Chart v8) | Yahoo 약관 원문: *“Unless you have explicit written permission, you must not reproduce … distribute … any portion or use of, or access to, the Services”* | ✗ |
 | Alpha Vantage | ToS §2a: 개인·비상업 용도 라이선스. 다른 사람이 정보에 접근할 수 있게 하는 것은 “commercial use”로 규정 | ✗ |
 | Twelve Data | ToU §2.1~2.4: 라이선스는 **Internal Use** 한정. 제3자 제공은 `Redistribution Rights Add-On` 또는 별도 서면 계약 필요 | ✗ |
 | Finnhub | ToS “Redistribution Rights”: **데이터 또는 그 파생 결과**를 서면 승인 없이 제3자와 공유·재배포 금지 | ✗ |
 | Tiingo | ToU §1.6·§7.3: 무료 Starter 플랜은 **영구 저장 자체가 금지**(휘발성 메모리만), 재배포는 별도 유료 라이선스 | ✗ |
 | Polygon (Massive) | Individuals ToS §1 / Market Data Terms §1: 개인·비상업 용도. “**다른 사람과 정보를 공유하거나 다른 사용자를 위한 서비스·앱을 만드는 것은 허용되지 않는다**” | ✗ |
-| Stooq | 약관 5.3: Stooq 동의 없이 **재배포 불가**, 다운로드 페이지 “personal use only, commercial use prohibited” | ✗ |
+| Stooq | 약관 §5.3 원문: *“Redistribution of data found on the website is not allowed without the consent of Stooq.”* | ✗ |
 | 금융위원회_주식시세정보 (공공데이터포털) | **공공누리 제4유형**(출처표시+상업적 이용금지+변경금지). “상업적 목적 여부와 상관 없이 **제3자 무단 제공 및 재배포가 엄격히 금지**” — 게다가 **일별** 데이터라 5분봉이 아님 | ✗ |
 | KRX 정보데이터시스템 | 시세는 유료 라이선스(KRX Data Marketplace). 무료 재배포 없음 | △ 유료 |
 | 한국투자증권 KIS OpenAPI | 본인 계좌·본인 프로그램용 개인 이용 약관, 앱키는 개인 발급 | ✗ 공개 배포 |
