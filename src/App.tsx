@@ -445,430 +445,436 @@ export default function App() {
 
       {loadError && <div className="alert error">{loadError}</div>}
 
-      {tab === "sim" ? (
-        <main className="layout" id="panel-sim" role="tabpanel" aria-labelledby="tab-sim">
-          <section className="card panel-input" aria-labelledby="input-title">
-            <h2 id="input-title" className="card-title">
-              계획 입력
-            </h2>
+      {/* v2.3.3 — 두 탭 패널을 조건부 언마운트하지 않고 항상 DOM 에 두고, 비활성 패널은 hidden 으로
+          감춘다. 그래야 tab 의 aria-controls(panel-sim·panel-report)가 늘 실제 요소를 가리킨다. */}
+      <main
+        className="layout"
+        id="panel-sim"
+        role="tabpanel"
+        aria-labelledby="tab-sim"
+        hidden={tab !== "sim"}
+      >
+        <section className="card panel-input" aria-labelledby="input-title">
+          <h2 id="input-title" className="card-title">
+            계획 입력
+          </h2>
 
-            <label className="field">
-              <span className="field-label">
-                종목 데이터 선택 <span className="muted small">(가상 체험 5종 · 내 CSV · 내 API 키)</span>
-              </span>
-              <select
-                className="control"
-                value={datasetId}
-                data-testid="dataset-select"
-                onChange={(e) => changeDataset(e.target.value)}
-              >
-                {sampleOptions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.symbol}) · {s.sessions}일 · {s.sessionBars}봉
-                  </option>
-                ))}
-                {byokDataset && (
-                  <option value="byok">
-                    내 API 키: {byokDataset.symbol} · {byokDataset.meta.sessionsUsed}일 ·{" "}
-                    {byokDataset.meta.sessionBars}봉
-                  </option>
-                )}
-                <option value="custom">내 데이터 직접 입력 (CSV/JSON)</option>
-              </select>
-            </label>
+          <label className="field">
+            <span className="field-label">
+              종목 데이터 선택 <span className="muted small">(가상 체험 5종 · 내 CSV · 내 API 키)</span>
+            </span>
+            <select
+              className="control"
+              value={datasetId}
+              data-testid="dataset-select"
+              onChange={(e) => changeDataset(e.target.value)}
+            >
+              {sampleOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.symbol}) · {s.sessions}일 · {s.sessionBars}봉
+                </option>
+              ))}
+              {byokDataset && (
+                <option value="byok">
+                  내 API 키: {byokDataset.symbol} · {byokDataset.meta.sessionsUsed}일 ·{" "}
+                  {byokDataset.meta.sessionBars}봉
+                </option>
+              )}
+              <option value="custom">내 데이터 직접 입력 (CSV/JSON)</option>
+            </select>
+          </label>
 
-            <p className="privacy-note" data-testid="privacy-note">
-              내장 가상 체험 데이터와 내 파일은 브라우저 안에서만 처리되고 외부로 전송되지 않습니다. 아래에서
-              내 API 키를 넣은 경우에만 <strong>내 브라우저가 시세 제공처에 직접</strong> 요청하며, 키와
-              데이터는 이 사이트 서버로 보내지 않습니다.
+          <p className="privacy-note" data-testid="privacy-note">
+            내장 가상 체험 데이터와 내 파일은 브라우저 안에서만 처리되고 외부로 전송되지 않습니다. 아래에서
+            내 API 키를 넣은 경우에만 <strong>내 브라우저가 시세 제공처에 직접</strong> 요청하며, 키와
+            데이터는 이 사이트 서버로 보내지 않습니다.
+          </p>
+
+          {dataset?.synthetic && (
+            <p className="alert warn small synthetic-note" role="note" data-testid="synthetic-note">
+              지금 고른 데이터는 <strong>실제 시세가 아닌 가상 생성 통계 예시</strong>입니다. 저작권·약관
+              문제가 없도록 무작위로 만든 패턴이라 실제 종목의 과거 흐름과 다릅니다.
             </p>
+          )}
 
-            {dataset?.synthetic && (
-              <p className="alert warn small synthetic-note" role="note" data-testid="synthetic-note">
-                지금 고른 데이터는 <strong>실제 시세가 아닌 가상 생성 통계 예시</strong>입니다. 저작권·약관
-                문제가 없도록 무작위로 만든 패턴이라 실제 종목의 과거 흐름과 다릅니다.
-              </p>
-            )}
+          <ApiKeyPanel onApply={applyByok} onRequestCustom={openCustomEditor} />
 
-            <ApiKeyPanel onApply={applyByok} onRequestCustom={openCustomEditor} />
-
-            {datasetId === "custom" && (
-              <div className="custom-box">
-                <div className="custom-actions">
-                  <label className="file-btn">
-                    파일 선택
-                    <input
-                      type="file"
-                      accept=".csv,.txt,.json,text/csv,application/json"
-                      onChange={(e) => onFile(e.target.files?.[0])}
-                    />
-                  </label>
-                  <button type="button" className="link-btn" onClick={fillExample}>
-                    예시 채우기
-                  </button>
-                  <button type="button" className="link-btn" onClick={downloadSampleCsv}>
-                    CSV 형식 받기
-                  </button>
-                </div>
-                <textarea
-                  className="control textarea"
-                  ref={customTextareaRef}
-                  placeholder={"시각,시가,고가,저가,종가,거래량\n2026-11-18 09:00,71500,71800,71300,71600,120345\n2026-11-18 09:05,71600,71900,71400,71750,98411"}
-                  value={customText}
-                  onChange={(e) => setCustomText(e.target.value)}
-                  rows={6}
-                  aria-label="차트 데이터 붙여넣기"
-                  data-testid="custom-textarea"
-                />
-                <button
-                  type="button"
-                  className="btn secondary"
-                  onClick={() => applyCustom(customText)}
-                  disabled={customBusy || !customText.trim()}
-                  data-testid="apply-custom"
-                >
-                  {customBusy ? "읽는 중…" : "이 데이터로 적용"}
+          {datasetId === "custom" && (
+            <div className="custom-box">
+              <div className="custom-actions">
+                <label className="file-btn">
+                  파일 선택
+                  <input
+                    type="file"
+                    accept=".csv,.txt,.json,text/csv,application/json"
+                    onChange={(e) => onFile(e.target.files?.[0])}
+                  />
+                </label>
+                <button type="button" className="link-btn" onClick={fillExample}>
+                  예시 채우기
                 </button>
-                {customError && (
-                  <p className="alert error small" role="alert" data-testid="custom-error">
-                    {customError}
-                  </p>
-                )}
-                {customWarnings.map((w) => (
-                  <p key={w} className="alert warn small">
-                    {w}
-                  </p>
-                ))}
-                <p className="footnote">
-                  같은 날짜에 봉이 3개 이상인 분봉(날짜+시간) 데이터를 넣어 주세요. 날짜만 있는 일봉은 이
-                  단계에서 재생할 수 없습니다. 값이 어긋난 봉(고가&lt;저가, 범위 밖 시·종가, 0 이하 가격,
-                  음수 거래량, 중복·역순 시각, 달력에 없는 날짜·시각, 문자 섞인 숫자)은 적용되지 않습니다.
-                  국내 HTS 기본 내보내기처럼 <strong>최신 봉이 위에 오는(역순) CSV</strong>는 위아래를 뒤집어
-                  시간순(오래된 봉 → 최신 봉)으로 붙여넣어 주세요.
-                </p>
-              </div>
-            )}
-
-            {customPending && (
-              <p className="alert warn small" role="status" data-testid="custom-pending">
-                {CUSTOM_PENDING_MESSAGE} — 지금은 이전 종목 데이터로 계산하지 않습니다.
-              </p>
-            )}
-
-            <div className="field-label position-label" id="position-label">
-              가정할 포지션 <span className="muted small">(매매 신호가 아니라 내 계획의 방향)</span>
-            </div>
-            <div className="seg" role="group" aria-labelledby="position-label">
-              <button
-                type="button"
-                className={side === "buy" ? "seg-btn active" : "seg-btn"}
-                aria-pressed={side === "buy"}
-                onClick={() => changeSide("buy")}
-              >
-                매수
-              </button>
-              <button
-                type="button"
-                className={side === "sell" ? "seg-btn active" : "seg-btn"}
-                aria-pressed={side === "sell"}
-                onClick={() => changeSide("sell")}
-              >
-                매도
-              </button>
-            </div>
-
-            <div className="grid2">
-              <label className="field">
-                <span className="field-label">
-                  진입가 <span className="tag-example">예시 입력값(가상)</span>
-                </span>
-                <input
-                  className="control"
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  value={entry}
-                  data-testid="entry-input"
-                  onChange={(e) => setEntry(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">
-                  손절가 <span className="tag-example">예시 입력값(가상)</span>
-                </span>
-                <input
-                  className="control"
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  value={stop}
-                  data-testid="stop-input"
-                  onChange={(e) => setStop(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">
-                  목표가 <span className="tag-example">예시 입력값(가상)</span>
-                </span>
-                <input
-                  className="control"
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  value={target}
-                  data-testid="target-input"
-                  onChange={(e) => setTarget(e.target.value)}
-                />
-              </label>
-              <div className="field">
-                <span className="field-label">손익비 프리셋</span>
-                <div className="rr-row">
-                  {[1, 1.5, 2].map((r) => (
-                    <button key={r} type="button" className="chip" onClick={() => applyRR(r)}>
-                      {r}R
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <p className="example-note">
-              진입가·손절가·목표가의 기본값은 과거 봉 가격에서 자동으로 채운 <strong>예시(가상)</strong>
-              입니다. 추천가·매매 신호가 아니므로 내 계획으로 직접 바꿔 넣으세요.
-            </p>
-
-            <label className="field">
-              <span className="field-label">
-                진입 시각 <span className="muted small">(이 봉 종가에 진입했다고 가정)</span>
-              </span>
-              <select
-                className="control"
-                value={entryBar}
-                onChange={(e) => setEntryBar(Number(e.target.value))}
-                disabled={!dataset}
-              >
-                {!dataset && <option value={entryBar}>데이터를 적용하면 시각을 고를 수 있습니다</option>}
-                {(dataset?.times ?? []).slice(0, -1).map((t, i) => (
-                  <option key={t + i} value={i}>
-                    {t} · 남은 봉 {dataset ? dataset.times.length - 1 - i : 0}개
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="grid2">
-              <label className="field">
-                <span className="field-label">
-                  계좌 금액 <span className="muted small">({unit === "USD" ? "달러" : unit || "입력 통화"})</span>
-                </span>
-                <input
-                  className="control"
-                  type="number"
-                  inputMode="numeric"
-                  step="any"
-                  min="0"
-                  value={account}
-                  onChange={(e) => setAccount(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">1회 허용 손실률 (%)</span>
-                <input
-                  className="control"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  value={riskPct}
-                  onChange={(e) => setRiskPct(e.target.value)}
-                />
-              </label>
-            </div>
-
-            <div className="run-stack">
-              <button
-                className="btn primary"
-                onClick={execute}
-                disabled={runDisabled}
-                data-testid="run-btn"
-                aria-describedby={customPending ? "custom-pending" : undefined}
-              >
-                {running ? "재생 중…" : "1만 번 모의 재생 실행"}
-              </button>
-              <div className="run-meta">
-                <span>
-                  남은 봉 {dataset ? `${remaining}개` : "-"} · 고정 시드 {SEED} · 같은 입력이면 같은
-                  결과가 나옵니다.
-                </span>
-                <button type="button" className="link-btn" onClick={resetPrices}>
-                  가격 초기화
+                <button type="button" className="link-btn" onClick={downloadSampleCsv}>
+                  CSV 형식 받기
                 </button>
               </div>
-            </div>
-            {error && (
-              <p className="alert error" role="alert">
-                {error}
-              </p>
-            )}
-          </section>
-
-          <div className="col-results" ref={resultsRef}>
-            {!run && (
-              <section className="card empty-state">
-                <h2 className="card-title">아직 재생하지 않았습니다</h2>
-                <p>
-                  종목과 진입가·손절가·목표가를 정하고 <strong>1만 번 모의 재생 실행</strong>을 누르면,
-                  과거 봉의 수익률 분포로 남은 장을 10,000번 다시 걸어 결과 확률과 경로 분포를 보여줍니다.
+              <textarea
+                className="control textarea"
+                ref={customTextareaRef}
+                placeholder={"시각,시가,고가,저가,종가,거래량\n2026-11-18 09:00,71500,71800,71300,71600,120345\n2026-11-18 09:05,71600,71900,71400,71750,98411"}
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                rows={6}
+                aria-label="차트 데이터 붙여넣기"
+                data-testid="custom-textarea"
+              />
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => applyCustom(customText)}
+                disabled={customBusy || !customText.trim()}
+                data-testid="apply-custom"
+              >
+                {customBusy ? "읽는 중…" : "이 데이터로 적용"}
+              </button>
+              {customError && (
+                <p className="alert error small" role="alert" data-testid="custom-error">
+                  {customError}
                 </p>
-                <ul className="bullets">
-                  <li>목표 도달 / 손절 도달 / 장 마감 미도달 확률</li>
-                  <li>손실 한도 기준 계산 수량과 리스크 요약</li>
-                  <li>과거 같은 셋업 백테스트와 경로 분포 차트</li>
-                  <li>쉬운 말로 풀어 주는 2. 최종 해석 리포트(초등학생 눈높이)</li>
-                </ul>
-              </section>
-            )}
+              )}
+              {customWarnings.map((w) => (
+                <p key={w} className="alert warn small">
+                  {w}
+                </p>
+              ))}
+              <p className="footnote">
+                같은 날짜에 봉이 3개 이상인 분봉(날짜+시간) 데이터를 넣어 주세요. 날짜만 있는 일봉은 이
+                단계에서 재생할 수 없습니다. 값이 어긋난 봉(고가&lt;저가, 범위 밖 시·종가, 0 이하 가격,
+                음수 거래량, 중복·역순 시각, 달력에 없는 날짜·시각, 문자 섞인 숫자)은 적용되지 않습니다.
+                국내 HTS 기본 내보내기처럼 <strong>최신 봉이 위에 오는(역순) CSV</strong>는 위아래를 뒤집어
+                시간순(오래된 봉 → 최신 봉)으로 붙여넣어 주세요.
+              </p>
+            </div>
+          )}
 
-            {run && (
-              <>
-                {stale && (
-                  <p className="alert warn small" role="status">
-                    입력이 바뀌었습니다. 아래 결과는 이전 입력 기준입니다. 다시 실행해 주세요.
-                  </p>
-                )}
-                <div
-                  className="run-head"
-                  ref={resultHeadingRef}
-                  tabIndex={-1}
-                  role="region"
-                  aria-label="재생 결과"
-                  data-testid="result-heading"
-                >
-                  <span className="badge strong">
-                    {run.dataset.name} · {run.plan.side === "buy" ? "매수" : "매도"} ·{" "}
-                    {run.dataset.times[run.plan.entryBar]} 진입
-                  </span>
-                  <span className="muted small">
-                    진입 {formatPrice(run.plan.entry, run.dataset.priceUnit)} · 손절{" "}
-                    {formatPrice(run.plan.stop, run.dataset.priceUnit)} · 목표{" "}
-                    {formatPrice(run.plan.target, run.dataset.priceUnit)}
-                  </span>
-                </div>
+          {customPending && (
+            <p className="alert warn small" role="status" data-testid="custom-pending">
+              {CUSTOM_PENDING_MESSAGE} — 지금은 이전 종목 데이터로 계산하지 않습니다.
+            </p>
+          )}
 
-                <div className="easy-banner" data-testid="easy-banner">
-                  <div className="easy-banner-body">
-                    <span className="badge strong">5초 요약</span>
-                    <p>
-                      {/* v2.2.4 — 결과 카드와 같은 0.1% 표기 + 미도달을 함께 적어 세 값이 100%가 되게 한다 */}
-                      1만 번 중{" "}
-                      <strong
-                        className={positiveTone(isExtremeStop(run.plan.entry, run.plan.stop))}
-                        data-testid="banner-p-target"
-                      >
-                        {bannerPct.target}
-                      </strong>{" "}
-                      목표 도달 · <strong className="neg" data-testid="banner-p-stop">{bannerPct.stop}</strong>{" "}
-                      손절 · <strong data-testid="banner-p-neither">{bannerPct.neither}</strong> 장 끝까지
-                      미도달 · 1회 평균{" "}
-                      {/* 극단 입력은 평균 R을 초록으로 강조하지 않고 중립 회색으로 (v2.2.2) */}
-                      <strong
-                        className={avgRTone(run.sim.avgR, isExtremeStop(run.plan.entry, run.plan.stop))}
-                        data-testid="banner-avg-r"
-                      >
-                        {formatR(run.sim.avgR)}
-                      </strong>
-                    </p>
-                    {isExtremeStop(run.plan.entry, run.plan.stop) && (
-                      <p className="muted small" data-testid="banner-extreme-note">
-                        {EXTREME_BANNER_NOTE}
-                      </p>
-                    )}
-                    {run.size.shares === 0 && (
-                      <p className="muted small" data-testid="banner-zero-share-note">
-                        {ZERO_SHARES_BANNER_NOTE}
-                      </p>
-                    )}
-                    <p className="muted small">
-                      신호등 결론부터 초등학생 눈높이로 풀고, 하루 흔들림·손절·목표 조합·20번 생존·수량까지
-                      한 페이지에 정리했습니다.
-                    </p>
-                  </div>
-                  <button type="button" className="btn easy-btn" onClick={openReport} data-testid="open-report">
-                    쉬운 해석 보러가기 →
-                  </button>
-                </div>
-
-                <section className="card">
-                  <ResultCards
-                    sim={run.sim}
-                    unit={run.dataset.priceUnit}
-                    dataset={run.dataset}
-                    extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
-                  />
-                  <p className="safe-line">
-                    1만 회 빈도는 미래 확률이 아니라 과거 봉 재표본 모형 결과입니다. 같은 봉 내 손절·목표
-                    동시 도달 시 손절 우선 처리, 종료가 분포는 이후 장 마감까지 재생한 값입니다. 미래
-                    주가·수급·뉴스를 반영하지 않으며 매매 판단의 근거가 될 수 없습니다.
-                  </p>
-                </section>
-
-                <section className="card">
-                  <div className="card-head">
-                    <h3 className="card-title">경로 분포 차트</h3>
-                    <span className="muted small">
-                      {run.dataset.times[run.plan.entryBar]} → {run.dataset.meta.sessionEnd} · 샘플 20개 궤적
-                    </span>
-                  </div>
-                  <FanChart
-                    times={run.dataset.times}
-                    entryBar={run.plan.entryBar}
-                    entry={run.plan.entry}
-                    stop={run.plan.stop}
-                    target={run.plan.target}
-                    sim={run.sim}
-                    unit={run.dataset.priceUnit}
-                  />
-                </section>
-
-                <SizingCard
-                  size={run.size}
-                  unit={run.dataset.priceUnit}
-                  account={run.plan.account}
-                  riskPct={run.plan.riskPct}
-                  extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
-                />
-
-                <BacktestCard
-                  bt={run.bt}
-                  unit={run.dataset.priceUnit}
-                  intervalMinutes={run.dataset.meta.intervalSeconds ? run.dataset.meta.intervalSeconds / 60 : 5}
-                  extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
-                />
-              </>
-            )}
-
-            {dataset && <DataNote dataset={dataset} warnings={customWarnings} />}
+          <div className="field-label position-label" id="position-label">
+            가정할 포지션 <span className="muted small">(매매 신호가 아니라 내 계획의 방향)</span>
           </div>
-        </main>
-      ) : (
-        <main id="panel-report" role="tabpanel" aria-labelledby="tab-report">
-          {run ? (
-            <ReportView run={run} stale={stale} onBack={() => setTab("sim")} />
-          ) : (
-            <section className="card empty-state">
-              <h2 className="card-title">아직 해석할 결과가 없습니다</h2>
-              <p>
-                <strong>1. 시뮬레이터</strong>에서 종목과 진입가·손절가·목표가를 정하고 1만 번 모의 재생을
-                실행하면, 이 탭에 초보자용 최종 해석 리포트(요약·흔들림 온도계·손절·목표 조합·20회 생존)가
-                만들어집니다.
-              </p>
-              <button type="button" className="btn primary" onClick={() => setTab("sim")}>
-                1. 시뮬레이터로 가기
+          <div className="seg" role="group" aria-labelledby="position-label">
+            <button
+              type="button"
+              className={side === "buy" ? "seg-btn active" : "seg-btn"}
+              aria-pressed={side === "buy"}
+              onClick={() => changeSide("buy")}
+            >
+              매수
+            </button>
+            <button
+              type="button"
+              className={side === "sell" ? "seg-btn active" : "seg-btn"}
+              aria-pressed={side === "sell"}
+              onClick={() => changeSide("sell")}
+            >
+              매도
+            </button>
+          </div>
+
+          <div className="grid2">
+            <label className="field">
+              <span className="field-label">
+                진입가 <span className="tag-example">예시 입력값(가상)</span>
+              </span>
+              <input
+                className="control"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                value={entry}
+                data-testid="entry-input"
+                onChange={(e) => setEntry(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">
+                손절가 <span className="tag-example">예시 입력값(가상)</span>
+              </span>
+              <input
+                className="control"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                value={stop}
+                data-testid="stop-input"
+                onChange={(e) => setStop(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">
+                목표가 <span className="tag-example">예시 입력값(가상)</span>
+              </span>
+              <input
+                className="control"
+                type="number"
+                inputMode="decimal"
+                step="any"
+                value={target}
+                data-testid="target-input"
+                onChange={(e) => setTarget(e.target.value)}
+              />
+            </label>
+            <div className="field">
+              <span className="field-label">손익비 프리셋</span>
+              <div className="rr-row">
+                {[1, 1.5, 2].map((r) => (
+                  <button key={r} type="button" className="chip" onClick={() => applyRR(r)}>
+                    {r}R
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="example-note">
+            진입가·손절가·목표가의 기본값은 과거 봉 가격에서 자동으로 채운 <strong>예시(가상)</strong>
+            입니다. 추천가·매매 신호가 아니므로 내 계획으로 직접 바꿔 넣으세요.
+          </p>
+
+          <label className="field">
+            <span className="field-label">
+              진입 시각 <span className="muted small">(이 봉 종가에 진입했다고 가정)</span>
+            </span>
+            <select
+              className="control"
+              value={entryBar}
+              onChange={(e) => setEntryBar(Number(e.target.value))}
+              disabled={!dataset}
+            >
+              {!dataset && <option value={entryBar}>데이터를 적용하면 시각을 고를 수 있습니다</option>}
+              {(dataset?.times ?? []).slice(0, -1).map((t, i) => (
+                <option key={t + i} value={i}>
+                  {t} · 남은 봉 {dataset ? dataset.times.length - 1 - i : 0}개
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid2">
+            <label className="field">
+              <span className="field-label">
+                계좌 금액 <span className="muted small">({unit === "USD" ? "달러" : unit || "입력 통화"})</span>
+              </span>
+              <input
+                className="control"
+                type="number"
+                inputMode="numeric"
+                step="any"
+                min="0"
+                value={account}
+                onChange={(e) => setAccount(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">1회 허용 손실률 (%)</span>
+              <input
+                className="control"
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                min="0"
+                max="100"
+                value={riskPct}
+                onChange={(e) => setRiskPct(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="run-stack">
+            <button
+              className="btn primary"
+              onClick={execute}
+              disabled={runDisabled}
+              data-testid="run-btn"
+              aria-describedby={customPending ? "custom-pending" : undefined}
+            >
+              {running ? "재생 중…" : "1만 번 모의 재생 실행"}
+            </button>
+            <div className="run-meta">
+              <span>
+                남은 봉 {dataset ? `${remaining}개` : "-"} · 고정 시드 {SEED} · 같은 입력이면 같은
+                결과가 나옵니다.
+              </span>
+              <button type="button" className="link-btn" onClick={resetPrices}>
+                가격 초기화
               </button>
+            </div>
+          </div>
+          {error && (
+            <p className="alert error" role="alert">
+              {error}
+            </p>
+          )}
+        </section>
+
+        <div className="col-results" ref={resultsRef}>
+          {!run && (
+            <section className="card empty-state">
+              <h2 className="card-title">아직 재생하지 않았습니다</h2>
+              <p>
+                종목과 진입가·손절가·목표가를 정하고 <strong>1만 번 모의 재생 실행</strong>을 누르면,
+                과거 봉의 수익률 분포로 남은 장을 10,000번 다시 걸어 결과 확률과 경로 분포를 보여줍니다.
+              </p>
+              <ul className="bullets">
+                <li>목표 도달 / 손절 도달 / 장 마감 미도달 확률</li>
+                <li>손실 한도 기준 계산 수량과 리스크 요약</li>
+                <li>과거 같은 셋업 백테스트와 경로 분포 차트</li>
+                <li>쉬운 말로 풀어 주는 2. 최종 해석 리포트(초등학생 눈높이)</li>
+              </ul>
             </section>
           )}
-        </main>
-      )}
+
+          {run && (
+            <>
+              {stale && (
+                <p className="alert warn small" role="status">
+                  입력이 바뀌었습니다. 아래 결과는 이전 입력 기준입니다. 다시 실행해 주세요.
+                </p>
+              )}
+              <div
+                className="run-head"
+                ref={resultHeadingRef}
+                tabIndex={-1}
+                role="region"
+                aria-label="재생 결과"
+                data-testid="result-heading"
+              >
+                <span className="badge strong">
+                  {run.dataset.name} · {run.plan.side === "buy" ? "매수" : "매도"} ·{" "}
+                  {run.dataset.times[run.plan.entryBar]} 진입
+                </span>
+                <span className="muted small">
+                  진입 {formatPrice(run.plan.entry, run.dataset.priceUnit)} · 손절{" "}
+                  {formatPrice(run.plan.stop, run.dataset.priceUnit)} · 목표{" "}
+                  {formatPrice(run.plan.target, run.dataset.priceUnit)}
+                </span>
+              </div>
+
+              <div className="easy-banner" data-testid="easy-banner">
+                <div className="easy-banner-body">
+                  <span className="badge strong">5초 요약</span>
+                  <p>
+                    {/* v2.2.4 — 결과 카드와 같은 0.1% 표기 + 미도달을 함께 적어 세 값이 100%가 되게 한다 */}
+                    1만 번 중{" "}
+                    <strong
+                      className={positiveTone(isExtremeStop(run.plan.entry, run.plan.stop))}
+                      data-testid="banner-p-target"
+                    >
+                      {bannerPct.target}
+                    </strong>{" "}
+                    목표 도달 · <strong className="neg" data-testid="banner-p-stop">{bannerPct.stop}</strong>{" "}
+                    손절 · <strong data-testid="banner-p-neither">{bannerPct.neither}</strong> 장 끝까지
+                    미도달 · 1회 평균{" "}
+                    {/* 극단 입력은 평균 R을 초록으로 강조하지 않고 중립 회색으로 (v2.2.2) */}
+                    <strong
+                      className={avgRTone(run.sim.avgR, isExtremeStop(run.plan.entry, run.plan.stop))}
+                      data-testid="banner-avg-r"
+                    >
+                      {formatR(run.sim.avgR)}
+                    </strong>
+                  </p>
+                  {isExtremeStop(run.plan.entry, run.plan.stop) && (
+                    <p className="muted small" data-testid="banner-extreme-note">
+                      {EXTREME_BANNER_NOTE}
+                    </p>
+                  )}
+                  {run.size.shares === 0 && (
+                    <p className="muted small" data-testid="banner-zero-share-note">
+                      {ZERO_SHARES_BANNER_NOTE}
+                    </p>
+                  )}
+                  <p className="muted small">
+                    신호등 결론부터 초등학생 눈높이로 풀고, 하루 흔들림·손절·목표 조합·20번 생존·수량까지
+                    한 페이지에 정리했습니다.
+                  </p>
+                </div>
+                <button type="button" className="btn easy-btn" onClick={openReport} data-testid="open-report">
+                  쉬운 해석 보러가기 →
+                </button>
+              </div>
+
+              <section className="card">
+                <ResultCards
+                  sim={run.sim}
+                  unit={run.dataset.priceUnit}
+                  dataset={run.dataset}
+                  extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
+                />
+                <p className="safe-line">
+                  1만 회 빈도는 미래 확률이 아니라 과거 봉 재표본 모형 결과입니다. 같은 봉 내 손절·목표
+                  동시 도달 시 손절 우선 처리, 종료가 분포는 이후 장 마감까지 재생한 값입니다. 미래
+                  주가·수급·뉴스를 반영하지 않으며 매매 판단의 근거가 될 수 없습니다.
+                </p>
+              </section>
+
+              <section className="card">
+                <div className="card-head">
+                  <h3 className="card-title">경로 분포 차트</h3>
+                  <span className="muted small">
+                    {run.dataset.times[run.plan.entryBar]} → {run.dataset.meta.sessionEnd} · 샘플 20개 궤적
+                  </span>
+                </div>
+                <FanChart
+                  times={run.dataset.times}
+                  entryBar={run.plan.entryBar}
+                  entry={run.plan.entry}
+                  stop={run.plan.stop}
+                  target={run.plan.target}
+                  sim={run.sim}
+                  unit={run.dataset.priceUnit}
+                />
+              </section>
+
+              <SizingCard
+                size={run.size}
+                unit={run.dataset.priceUnit}
+                account={run.plan.account}
+                riskPct={run.plan.riskPct}
+                extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
+              />
+
+              <BacktestCard
+                bt={run.bt}
+                unit={run.dataset.priceUnit}
+                intervalMinutes={run.dataset.meta.intervalSeconds ? run.dataset.meta.intervalSeconds / 60 : 5}
+                extreme={isExtremeStop(run.plan.entry, run.plan.stop)}
+              />
+            </>
+          )}
+
+          {dataset && <DataNote dataset={dataset} warnings={customWarnings} />}
+        </div>
+      </main>
+
+      <main id="panel-report" role="tabpanel" aria-labelledby="tab-report" hidden={tab !== "report"}>
+        {run ? (
+          <ReportView run={run} stale={stale} onBack={() => setTab("sim")} />
+        ) : (
+          <section className="card empty-state">
+            <h2 className="card-title">아직 해석할 결과가 없습니다</h2>
+            <p>
+              <strong>1. 시뮬레이터</strong>에서 종목과 진입가·손절가·목표가를 정하고 1만 번 모의 재생을
+              실행하면, 이 탭에 초보자용 최종 해석 리포트(요약·흔들림 온도계·손절·목표 조합·20회 생존)가
+              만들어집니다.
+            </p>
+            <button type="button" className="btn primary" onClick={() => setTab("sim")}>
+              1. 시뮬레이터로 가기
+            </button>
+          </section>
+        )}
+      </main>
 
       <footer className="footer">
         <p>

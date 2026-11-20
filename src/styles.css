@@ -23,6 +23,15 @@
   box-sizing: border-box;
 }
 
+/*
+ * v2.3.3 — 비활성 탭 패널은 DOM 에 남기고 hidden 속성으로 감춘다(aria-controls 정합).
+ * 브라우저 기본 [hidden]{display:none} 은 우선순위가 낮아 .layout{display:grid} 같은 클래스 규칙에
+ * 밀린다. 그러면 화면에는 두 패널이 같이 보인다 — !important 로 확실히 감춘다.
+ */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;

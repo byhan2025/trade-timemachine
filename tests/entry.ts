@@ -91,6 +91,7 @@ export {
   survivalFlatNote,
 } from "../src/lib/easy";
 export { TopBar } from "../src/components/TopBar";
+export { default as App } from "../src/App";
 export { APP_VERSION, VERSION_SHORT, VERSION_NOTE } from "../src/lib/version";
 export {
   BYOK_MAX_BARS,

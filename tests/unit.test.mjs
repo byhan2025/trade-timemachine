@@ -2013,17 +2013,17 @@ test("v2.2.4 배선: 배너·결과 카드·리포트가 같은 퍼센트 표기
   assert.match(combo, /실제 \{easyTargetMultiple\(cell\.actualR\)\}/);
 });
 
-test("v2.3.2 버전 표기: package.json·version.ts·배지·푸터·README 가 같은 버전을 가리킨다", () => {
+test("버전 표기: package.json·version.ts·배지·푸터·README 가 같은 버전을 가리킨다", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(pkg.version, APP_VERSION);
-  assert.equal(APP_VERSION, "2.3.2");
+  assert.equal(APP_VERSION, "2.3.3");
   // 배지는 짧은 v2.3 만 (긴 설명은 title 속성으로)
   assert.equal(VERSION_SHORT, "2.3");
   const app = readFileSync("src/App.tsx", "utf8");
   assert.match(app, /한국형 타임머신 시뮬레이터 v\{APP_VERSION\}/);
   assert.match(app, /import \{ APP_VERSION \} from "\.\/lib\/version"/);
   const readme = readFileSync("README.md", "utf8");
-  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.3\.2\)/);
+  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.3\.3\)/);
 });
 
 /* ================================================================ v2.3.0 모바일 헤더 복구 · 실시간 검색 제외 */
@@ -2649,7 +2649,8 @@ test("v2.3.2 CSV ②: 수식 인젝션은 맨 앞 ' 로 막고, 음수·부호 �
 test("v2.3.2 CSV ③: 내보낸 CSV는 머리글 1줄 + 마지막 n일 봉이고 그대로 다시 읽힌다", () => {
   const { dataset } = parseCustom(csv(baseRows(4)));
   const text = toCsv(dataset, 3);
-  const lines = text.split("\n");
+  // v2.3.3 부터 레코드 구분자는 CRLF 다 — 줄을 셀 때는 \r\n 기준으로 나눈다
+  const lines = text.split("\r\n");
   assert.equal(lines[0], HEADER);
   assert.equal(lines.length, 1 + 3 * 4);
   // 모든 줄의 칸 수가 같다(열이 밀리지 않는다)
@@ -2704,4 +2705,121 @@ test("v2.3.2 포커스·탭: 결과 제목 tabIndex -1 + preventScroll, 탭은 �
   }
   assert.match(app, /onKeyDown=\{onTabKeyDown\}/);
   assert.ok(readFileSync("src/styles.css", "utf8").includes(".run-head:focus"));
+});
+
+/* ================================================================ v2.3.3 CSV CRLF·선행 공백 수식 방어·탭 aria-controls·CSP */
+
+test("v2.3.3 CSV ④: 레코드 구분자는 CRLF 이고, CRLF·LF 어느 쪽으로 읽어도 같은 데이터다", () => {
+  const { dataset } = parseCustom(csv(baseRows(4)));
+  const text = toCsv(dataset, 3);
+  // 1) 구분자는 CRLF — LF 만 남은 줄이 없다
+  assert.equal(text.split("\r\n").length - 1, text.split("\n").length - 1, "LF 만인 줄이 섞여 있다");
+  assert.ok(text.includes("\r\n"));
+  // 2) 마지막 줄 뒤에 빈 줄을 덧붙이지 않는다(v2.3.2 와 같은 줄 수)
+  assert.ok(!text.endsWith("\n"), "끝에 빈 줄이 붙었다");
+  assert.equal(text.split("\r\n").length, 1 + 3 * 4);
+  // 3) CRLF 원문(파일 선택·내려받은 파일) 그대로 적용
+  const crlf = parseCustom(text).dataset;
+  assert.deepEqual(crlf.sessions, dataset.sessions.slice(-3));
+  assert.deepEqual(crlf.times, dataset.times);
+  // 4) 브라우저 textarea 는 CRLF → LF 로 정규화해 보관한다 — 그 텍스트도 같은 결과
+  const lf = parseCustom(text.replace(/\r\n/g, "\n")).dataset;
+  assert.deepEqual(lf.sessions, crlf.sessions);
+  assert.deepEqual(lf.times, crlf.times);
+  // 5) 섞여 있어도(한 줄은 LF, 한 줄은 CRLF) 읽는다 — 사용자가 붙여넣은 원문이 늘 깨끗하진 않다
+  const mixed = text.split("\r\n").join("\n").replace("\n", "\r\n");
+  assert.deepEqual(parseCustom(mixed).dataset.sessions, crlf.sessions);
+});
+
+test("v2.3.3 CSV ⑤: 앞쪽 공백·탭·개행 뒤의 수식도 막고, 음수 숫자는 그대로 둔다", () => {
+  // 엑셀은 칸 앞 공백을 지우고 다시 수식으로 읽는다 — 선두 문자만 보면 새어 나간다
+  for (const bad of ["  =1+1", " =SUM(A1)", "\t@SUM(1)", "   -cmd|' /C calc'!A0", "  \t-2+3", "  +1.5"]) {
+    assert.equal(csvCell(bad), "'" + bad, JSON.stringify(bad));
+  }
+  // 개행이 앞에 오면 인용까지 함께 된다
+  assert.equal(csvCell("\n=1+1"), '"\'' + "\n=1+1\"");
+  assert.equal(csvCell("\r@A1"), '"\'' + "\r@A1\"");
+  // 숫자로 읽히는 음수는 앞 공백이 있어도 방어하지 않는다(수치 데이터 보존)
+  for (const num of ["-1000", "  -1000", "\t-1.5e3", " -0.5"]) {
+    assert.equal(csvCell(num), num, JSON.stringify(num));
+  }
+  // 공백 뒤 글자·공백만 있는 칸은 건드리지 않는다
+  assert.equal(csvCell("  hello"), "  hello");
+  assert.equal(csvCell("   "), "   ");
+  assert.equal(csvRow(["  =1+1", 2]), "'  =1+1,2");
+});
+
+test("v2.3.3 CSP ⑥: index.html 이 메타 CSP 를 첫 자원 앞에 걸고, 인라인 스크립트·eval 이 없다", () => {
+  const html = readFileSync("index.html", "utf8");
+  const m = html.match(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/);
+  assert.ok(m, "index.html 에 CSP 메타가 없다");
+  const csp = m[1];
+  for (const need of [
+    "default-src 'self'",
+    "connect-src 'self' https://api.twelvedata.com",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "base-uri 'self'",
+    "form-action 'none'",
+    "object-src 'none'",
+  ]) {
+    assert.ok(csp.includes(need), need);
+  }
+  // script-src 를 무력화하는 지시가 없다
+  assert.ok(!/script-src[^;]*(unsafe-inline|unsafe-eval|\*)/.test(csp), csp);
+  // 메타는 첫 자원(스크립트·스타일 링크)보다 앞 — 뒤에 오면 그 요청은 정책 밖이다
+  const at = html.indexOf('http-equiv="Content-Security-Policy"');
+  assert.ok(at > 0);
+  assert.ok(at < html.indexOf("<script type="), "CSP 가 스크립트 뒤에 있다");
+  assert.ok(at < html.indexOf('<link rel="icon"'), "CSP 가 링크 뒤에 있다");
+  // 소스 index.html 에 인라인 <script> 가 없다(외부 모듈 1개)
+  assert.equal((html.match(/<script(?![^>]*\bsrc=)/g) || []).length, 0);
+  // 번들에 들어가는 소스에 eval·new Function 이 없다(script-src 'self' 와 짝)
+  const files = [
+    ...readdirSync("src").filter((f) => f.endsWith(".ts") || f.endsWith(".tsx")).map((f) => `src/${f}`),
+    ...readdirSync("src/lib").map((f) => `src/lib/${f}`),
+    ...readdirSync("src/components").map((f) => `src/components/${f}`),
+  ].filter((f) => f.endsWith(".ts") || f.endsWith(".tsx"));
+  assert.ok(files.length > 20);
+  for (const f of files) {
+    const text = readFileSync(f, "utf8");
+    assert.ok(!/\beval\s*\(/.test(text), `${f} 에 eval 이 있다`);
+    assert.ok(!/new\s+Function\s*\(/.test(text), `${f} 에 new Function 이 있다`);
+  }
+  // 개발 서버(vite dev)만 CSP 메타를 걷어낸다 — 배포 정책은 index.html 한 곳
+  const vite = readFileSync("vite.config.ts", "utf8");
+  assert.match(vite, /apply: "serve"/);
+  assert.ok(vite.includes("Content-Security-Policy"));
+});
+
+test("v2.3.3 탭 패널 ⑦: 두 tabpanel 이 조건부 언마운트 없이 DOM 에 남고 비활성 패널은 hidden", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  assert.match(app, /aria-controls="panel-sim"/);
+  assert.match(app, /aria-controls="panel-report"/);
+  assert.match(app, /id="panel-sim"[\s\S]{0,200}hidden=\{tab !== "sim"\}/);
+  assert.match(app, /id="panel-report"[\s\S]{0,200}hidden=\{tab !== "report"\}/);
+  // aria-controls 가 가리키는 id 가 실제로 렌더된다(조건부 아님)
+  assert.equal((app.match(/tab === "sim" \? \(/g) || []).length, 0, "패널이 아직 조건부 렌더링이다");
+  // 비활성 패널을 확실히 감추는 CSS — .layout{display:grid} 가 UA [hidden] 을 덮지 않게
+  const css = readFileSync("src/styles.css", "utf8");
+  assert.match(css, /\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/);
+});
+
+test("v2.3.3 탭 패널 ⑧: 초기 렌더 DOM 에 panel-sim·panel-report 가 모두 있고 sim 만 보인다", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { App, h } = await import("./.build/lib.mjs");
+  assert.equal(typeof App, "function", "App 이 테스트 번들에 없다");
+  const html = renderToStaticMarkup(h(App, null));
+  const sim = html.match(/<main[^>]*id="panel-sim"[^>]*>/);
+  const rep = html.match(/<main[^>]*id="panel-report"[^>]*>/);
+  assert.ok(sim, "panel-sim 이 초기 DOM 에 없다");
+  assert.ok(rep, "panel-report 가 초기 DOM 에 없다(aria-controls 대상 없음)");
+  assert.match(sim[0], /role="tabpanel"/);
+  assert.match(rep[0], /role="tabpanel"/);
+  assert.match(sim[0], /aria-labelledby="tab-sim"/);
+  assert.match(rep[0], /aria-labelledby="tab-report"/);
+  // 선택된 sim 은 hidden 이 없고, 비활성 report 는 hidden 이다
+  assert.ok(!/\shidden(=|\s|>)/.test(sim[0]), sim[0]);
+  assert.match(rep[0], /\shidden(=""|\s|>)/);
 });

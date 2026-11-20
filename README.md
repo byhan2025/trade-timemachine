@@ -1,4 +1,4 @@
-# 한국형 타임머신 시뮬레이터 (v2.3.2)
+# 한국형 타임머신 시뮬레이터 (v2.3.3)
 
 계획한 진입가·손절가·목표가를 **과거 실제 봉 데이터의 수익률 분포로 10,000번 다시 걸어보는** 독립 웹앱입니다.
 2단계에서 **실시간 5분봉 검색 UI**와 **GitHub Pages 공개 배포**, **Supabase Edge Function `stock-bars` 중계 서버**를 붙였고(실시간 검색은 v2.3.0에서 화면에서 제외 — 아래 「실시간 검색을 뺀 이유」),
@@ -49,6 +49,21 @@ v2.3.0은 사용자 지시 두 가지를 반영했습니다 — **①깨진 모�
 제목은 `white-space: nowrap`으로 단어 중간에서 끊기지 않습니다(자리가 모자라면 배지만 다음 줄로 내려감). 390px·360px 실측에서 제목 **1줄**, 부제 2줄입니다.
 **②실시간 종목 검색 제외**: `stock-bars` 중계 호출과 `서버 토큰 연동 대기 중` 배지를 화면에서 없애 **네트워크 요청 0건**(앱은 시세 서버를 전혀 부르지 않음)으로 만들고,
 입력 경로를 **내장 종목 + CSV/JSON 업로드**로 정리했습니다.
+
+v2.3.3은 텔레그램 회의실 4호 봇이 v2.3.2(91/100)에서 남긴 3건을 고쳤습니다 —
+**①CSV 레코드 구분자 CRLF + 선행 공백 수식 방어**: `toCsv` 가 줄을 `\r\n`(RFC 4180)으로 잇고, `csvCell` 은
+앞쪽 공백·탭·개행 뒤에 오는 `=`,`+`,`-`,`@` 도 `'` 로 막습니다(엑셀은 칸 앞 공백을 지우고 다시 수식으로 읽습니다).
+`-1000`·`  -1.5e3` 처럼 숫자인 음수는 그대로 둡니다. 내려받은 CRLF 파일을 **붙여넣기**와 **파일 선택** 두 경로로
+다시 적용해 같은 데이터·같은 재생 결과가 나오는 것을 실측했습니다.
+**②비활성 탭 패널 `aria-controls` 정합**: 종전에는 선택되지 않은 패널을 언마운트해 `aria-controls="panel-report"` 가
+존재하지 않는 id 를 가리켰습니다. 이제 두 `role="tabpanel"`(`panel-sim`·`panel-report`)을 **항상 DOM 에 두고**
+비활성 패널에 `hidden` 을 주며, `[hidden]{display:none !important}` 로 `.layout{display:grid}` 에 밀리지 않게 했습니다.
+탭을 오가도 시뮬레이터 입력·결과가 그대로 남습니다(언마운트 없음).
+**③CSP 메타 정책**: GitHub Pages 는 응답 헤더를 정할 수 없어 `index.html` 에
+`default-src 'self'; connect-src 'self' https://api.twelvedata.com; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'`
+을 걸었습니다. 빌드 산출물에는 인라인 스크립트가 없고 `eval`/`new Function` 도 쓰지 않아 `script-src 'self'` 로 충분하며,
+그 상태에서 BYOK(`api.twelvedata.com`) AAPL 5분봉 수신·1만 번 재생이 정상입니다(`vite dev` 는 HMR 인라인 스크립트 때문에
+`vite.config.ts` 가 개발 모드에서만 이 메타를 걷어냅니다 — 배포 정책은 `index.html` 한 곳).
 
 v2.3.2는 텔레그램 회의실 4호 봇이 v2.3.1(85/100)에서 지적한 5건을 고쳤습니다 —
 **①BYOK 키 전송 보안**: Twelve Data CORS preflight 가 `Authorization` 헤더를 허용하는 것을 실측(어 `OPTIONS` 204 +
@@ -154,7 +169,7 @@ Yahoo에서 받아 두었던 실제 5분봉 5종과 수집 스크립트(`scripts
 **유료 애드온·별도 서면 계약**이 조건입니다. 그래서 내장 데이터는 가상 생성으로 바꾸고, 실제 시세는
 **방문자 본인 키(BYOK)** 또는 **본인 CSV**로만 다루도록 했습니다.
 
-## 화면 보조 기능 (v2.3.2)
+## 화면 보조 기능 (v2.3.3)
 
 - **동작 줄이기**: 기기에서 `prefers-reduced-motion: reduce` 를 켜면 결과로 이동할 때 부드러운 스크롤 대신
   애니메이션 없이 바로 이동합니다(시뮬레이션 후·리포트 열기 두 곳).
@@ -162,8 +177,12 @@ Yahoo에서 받아 두었던 실제 5분봉 5종과 수집 스크립트(`scripts
   키보드 포커스를 옮기고(`focus({ preventScroll: true })`) 그 자리로 스크롤합니다.
 - **탭 키보드 탐색(v2.3.2)**: `role="tablist"` 에서 `ArrowLeft`/`ArrowRight`(처음↔끝 순환)·`Home`·`End` 로
   탭을 고르고 포커스를 옮깁니다(로빙 `tabIndex`, 선택은 포커스를 따라감).
-- **CSV 내보내기(v2.3.2)**: 모든 칸을 RFC 4180 으로 감싸고(쉼표·큰따옴표·줄바꿈) `=`,`+`,`-`,`@` 선두는
-  수식 인젝션을 막습니다(숫자인 `-1000`·`+1.5` 는 그대로). 내려받은 파일을 그대로 다시 붙여넣어도 같은 데이터입니다.
+- **CSV 내보내기(v2.3.2 → v2.3.3)**: 모든 칸을 RFC 4180 으로 감싸고(쉼표·큰따옴표·줄바꿈) `=`,`+`,`-`,`@` 선두는
+  수식 인젝션을 막습니다(숫자인 `-1000`·`+1.5` 는 그대로). v2.3.3부터 줄 구분자는 **CRLF** 이고, 앞쪽 공백·탭·개행
+  뒤의 수식 트리거도 막습니다. 내려받은 파일을 그대로 다시 붙여넣거나 파일로 골라도 같은 데이터입니다.
+- **CSP(v2.3.3)**: `index.html` 메타 CSP 로 스크립트·스타일·이미지·연결 대상을 `self`(+시세 호스트)로 제한합니다.
+  인라인 스크립트와 허용 밖 호스트 연결은 브라우저가 거부합니다(실측: 인라인 차단·`example.com` 차단·`api.twelvedata.com` 허용).
+- **탭 패널(v2.3.3)**: 두 패널이 항상 DOM 에 있고 비활성 패널만 `hidden` 입니다 — `aria-controls` 가 늘 실제 요소를 가리킵니다.
 - **메타 설명**: `index.html` 의 `description`·`og:description` 에서 “실시간 5분봉”을 빼고, 가상 체험·내 CSV·
   내 API 키라는 실제 기능으로 적었습니다.
 - **정리**: 화면에서 쓰지 않던 `StockSearch.tsx`·`stockApi.ts`·`supabase/functions/stock-bars/` 를 삭제했습니다.
@@ -263,6 +282,7 @@ CSV/JSON은 브라우저 안에서만 처리되고 외부로 전송되지 않습
 
 ## 검증 리포트
 
+- `reports/trade-timemachine/v2.3.3/` — v2.3.3(CSV CRLF 레코드 구분자+선행 공백 수식 방어·탭 패널 상시 마운트+`hidden`+`[hidden]` CSS·`index.html` 메타 CSP(인라인/허용 밖 호스트 차단 실측)·단위 테스트 118개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v2.3.2/` — v2.3.2(BYOK 키 `Authorization` 헤더 전송·`referrerPolicy`/meta referrer·CSV RFC 4180 이스케이프+수식 인젝션 방어·4단계→custom 이동 버튼·결과 포커스·탭 화살표/Home/End 키보드 탐색·단위 테스트 113개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v2.3.1/` — v2.3.1(본인 API 키 BYOK 4단계 가이드·가상 체험 5종 내장·Yahoo 원시 파일/중계 코드 삭제·메타 설명 정정·prefers-reduced-motion·단위 테스트 107개·1280/390/360 로컬+라이브 실측)
 - `reports/trade-timemachine/v2.3.0/` — v2.3.0(모바일 헤더 복구(390/360 제목 1줄)·실시간 검색 제외(`stock-bars` 요청 0건)·100종목 미내장 사유와 약관 근거·단위 테스트 94개·1280/390/360 로컬+라이브 실측)
