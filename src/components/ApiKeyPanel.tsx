@@ -158,9 +158,9 @@ export function ApiKeyPanel({ onApply }: { onApply: (d: Dataset) => void }) {
                 <span className="byok-step-no">1</span> 무료 API 키 발급 사이트 열기
               </h3>
               <p>
-                새 탭에서 Twelve Data 가입 화면을 엽니다. 이메일로 가입하고,{" "}
-                <strong>무료 Basic 플랜($0)</strong>을 그대로 쓰세요. 유료 플랜을 고르면 카드 정보를
-                넣어야 하니 고르지 않습니다.
+                새 탭에서 Twelve Data 가입 화면을 엽니다. 이메일(또는 구글 계정)로 가입하고,{" "}
+                <strong>무료 Basic 플랜($0)</strong>을 그대로 쓰세요. 유료 플랜은 돈이 나가니 고르지 말고
+                Basic 그대로 두면 됩니다.
               </p>
               <a className="guide-link" href={TD_REGISTER_URL} target="_blank" rel="noreferrer noopener">
                 Twelve Data 무료 가입 열기 (새 탭) ↗
