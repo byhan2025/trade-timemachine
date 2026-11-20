@@ -95,7 +95,7 @@ npm run build:pages  # GitHub Pages 서브패스 빌드 -> dist/ (base "/trade-t
 npm run preview      # dist 미리보기 (127.0.0.1:4180)
 npm run deploy:pages # build:pages + dist/ 를 gh-pages 브랜치로 푸시
 npm run samples      # 가상 체험 5분봉 5종 재생성 (고정 시드)
-npm test             # 프론트엔드 단위 테스트 113개 (esbuild 번들 + node --test, 추가 설치 없음)
+npm test             # 프론트엔드 단위 테스트 118개 (esbuild 번들 + node --test, 추가 설치 없음)
 ```
 
 ## 본인 API 키로 5분봉 불러오기 — BYOK (v2.3.1 · 키 전송 v2.3.2)
@@ -134,14 +134,16 @@ JSON으로 실어 재배포하는 것이 허용되는지 **약관별로 결론�
 Yahoo에서 받아 두었던 실제 5분봉 5종과 수집 스크립트(`scripts/fetch_samples.py`), 쓰지 않던
 `stockApi.ts`·`StockSearch.tsx`·`supabase/functions/stock-bars/` 중계 코드는 **저장소에서 삭제**했습니다.
 
-| 파일 | 이름 | 세션 |
-| --- | --- | --- |
-| `SYN-STABLE.json` | [가상 체험] 대형주 안정형 패턴 | 45일 × 72봉(09:00~14:55) |
-| `SYN-THEME.json` | [가상 체험] 고변동 테마주 패턴 | 45일 × 72봉 |
-| `SYN-UPTREND.json` | [가상 체험] 완만한 상승 우량주 패턴 | 45일 × 78봉(09:30~15:55) |
-| `SYN-REBOUND.json` | [가상 체험] 급락 뒤 반등형 패턴 | 45일 × 78봉 |
-| `SYN-BOX.json` | [가상 체험] 박스권 횡보형 패턴 | 45일 × 72봉 |
+| 파일 | 이름 | 세션 | 화폐·단가 |
+| --- | --- | --- | --- |
+| `SYN-STABLE.json` | [가상 체험] 대형주 안정형 패턴 | 45일 × 72봉(한국 정규장 09:00~14:55) | KRW · 원 |
+| `SYN-THEME.json` | [가상 체험] 고변동 테마주 패턴 | 45일 × 72봉(한국 정규장 09:00~14:55) | KRW · 원 |
+| `SYN-UPTREND.json` | [가상 체험] 완만한 상승 우량주 패턴 | 45일 × 78봉(미국 정규장 09:30~15:55) | USD · USD |
+| `SYN-REBOUND.json` | [가상 체험] 급락 뒤 반등형 패턴 | 45일 × 78봉(미국 정규장 09:30~15:55) | USD · USD |
+| `SYN-BOX.json` | [가상 체험] 박스권 횡보형 패턴 | 45일 × 72봉(한국 정규장 09:00~14:55) | KRW · 원 |
 
+- 거래일 범위: **2026-09-18 ~ 2026-11-19**, 생성 시각 `2026-11-20T10:00:00+09:00`, 봉 간격 `5분봉`.
+- 화면의 종목 목록·이름·세션은 `public/samples/index.json` 한 곳에서 읽습니다(파일 5개 + 인덱스 1개).
 - 생성기: `python3 scripts/make_synthetic_samples.py` (표준 라이브러리만, 고정 시드 → 같은 파일이 다시 나옴)
 - 화면 고지: 종목 이름이 `[가상 체험]`으로 시작하고, 선택하면 **“실제 시세가 아닌 가상 생성 통계 예시”** 배너,
   데이터 출처 카드에 **가상 체험 데이터** 배지와 “저작권·약관 문제가 없는 가상 생성 통계 예시” 문구가 나옵니다.
@@ -201,13 +203,30 @@ Yahoo에서 받아 두었던 실제 5분봉 5종과 수집 스크립트(`scripts
 - **파리티 검증**: 같은 데이터·같은 입력에서 파이썬 원본과 확률 차이 0.1~1.3%p(난수열 차이), 백테스트 결과는 건수까지 완전 일치.
 - **10,000회 성능**: 35~57ms(웹 실측).
 
-## 사용자 데이터 입력
+## 사용자 데이터 입력 (CSV/JSON · v2.3.3 동작)
 
-CSV/텍스트 붙여넣기 또는 파일(.csv/.txt/.json) 업로드.
+CSV/텍스트 붙여넣기 또는 파일 업로드. 파일 선택기는 **`.csv` · `.txt` · `.json`**(`text/csv`, `application/json`)만 받습니다.
 - 권장 형식: `시각,시가,고가,저가,종가,거래량` (`2026-11-18 09:05,71500,71600,71300,71450,12345`)
 - JSON: `[{date, time, open, high, low, close, volume}, …]` 또는 `[[시각, 시가, 고가, 저가, 종가], …]`
+- 숫자 칸은 **엄격한 숫자 형식**만 인정합니다 — `100,000`(천 단위 쉼표)·`100.5`·`.5`·`-2`·`+3`은 읽고, `100원`·`1 00`·`100abc`는 원문 그대로 지목해 차단합니다.
 - 같은 날짜에 봉이 3개 이상인 분봉만 지원. 날짜만 있는 일봉은 재생 불가(안내 문구 표시).
-- 봉 개수가 최빈값과 다른 날(반장·누락)은 자동 제외하고 화면에 알림.
+- 봉 개수가 최빈값과 다른 날(반장·누락)은 자동 제외하고 화면에 알림. 봉 개수만 같아도 **모든 거래일의 봉 시각(HH:MM) 순서가 같아야** 하며, 다르면 어긋난 세션을 지목해 차단합니다.
+- 완전한 거래일이 3일 미만이면(`3일 × 3봉` = 최소 9개) 계산하지 않습니다.
+
+### 내보내기·형식 예시 (v2.3.2 → v2.3.3)
+
+`내 데이터 직접 입력` 의 **[CSV 형식 받기]**·**[내려받기]** 는 지금 고른 데이터(또는 가상 체험 기본 종목)의 **마지막 3거래일**을
+`<종목>-3days.csv` 로 내려받습니다. 저장 형식은 v2.3.3 기준입니다.
+
+| 항목 | v2.3.3 동작 |
+| --- | --- |
+| 열 | `시각,시가,고가,저가,종가,거래량` (시각은 `YYYY-MM-DD HH:MM`) |
+| 레코드 구분자 | **CRLF(`\r\n`, RFC 4180)**. 파서는 `\r?\n` 이라 LF 파일도 그대로 읽습니다 |
+| 인용 | 칸에 쉼표·큰따옴표·줄바꿈이 있으면 큰따옴표로 감싸고 `"` → `""` |
+| 수식 인젝션 방어 | 칸이 `=`,`+`,`-`,`@`(또는 탭·CR·LF)로 시작하면 `'` 를 앞에 붙임. **앞쪽 공백·탭 뒤의 트리거도 막음**. 숫자인 음수(`-1000`, `  -1.5e3`)는 그대로 둠 |
+| 되돌리기 | 내려받은 파일을 **붙여넣기**와 **파일 선택** 두 경로로 다시 넣으면 같은 데이터·같은 재생 결과 |
+
+값이 어긋난 봉과 역순(최신 봉이 위) CSV는 적용 전에 막히고, 역순은 `위아래를 뒤집어 시간순으로 붙여넣으면 됩니다`로 안내합니다.
 
 ## 화면
 
@@ -273,6 +292,48 @@ v2.1.3에서는 각주에 **포지션 방향과 실제 사용한 평균 R**을 �
 CSV/JSON은 브라우저 안에서만 처리되고 외부로 전송되지 않습니다. v2.3.1부터는 방문자가 **자기 API 키**를 넣은 경우에만
 브라우저가 시세 제공처(`api.twelvedata.com`)에 직접 요청하며, v2.3.2부터 그 키는 **요청 헤더(Authorization)로만** 오갑니다
 (URL·Referer·방문 기록에 남지 않음). 그때도 키·데이터는 이 사이트 서버로 가지 않습니다.
+
+## 오픈소스 고지·라이선스
+
+이 앱의 계산 규칙은 아래 원본 구현을 TypeScript로 옮겨 만든 **2차 저작물**입니다. 원본은 **MIT 라이선스**라
+저작권 고지와 허가 문구를 함께 남기는 조건으로 사용·수정·배포할 수 있고, 이 저장소는 그 조건을 지킵니다.
+
+| 구분 | 이름 | 라이선스 | 고지 |
+| --- | --- | --- | --- |
+| 원본 로직 | `Jakeschincariol/day-trader-skill` (`trader-timemachine/timemachine.py`, `trader-exit/exit.py`, `trader-budget/size.py`, `trader-risk/check.py`) | **MIT** | Copyright (c) 2026 Jake Schincariol |
+| 런타임 | React 18.3.1 · React DOM 18.3.1 | MIT | — |
+| 빌드 | Vite 5.4.21 · `@vitejs/plugin-react` 4.7.0 | MIT | — |
+| 타입 | TypeScript 5.9.3 | Apache-2.0 | — |
+| 가상 데이터 | `public/samples/*.json` | 자체 생성(합성) | 무작위 생성값 — 실제 시세·저작권 대상 아님 |
+
+원본의 MIT 허가 문구(그대로 수록):
+
+```
+MIT License
+
+Copyright (c) 2026 Jake Schincariol
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+이 앱 저장소 자체에는 별도 라이선스 파일을 두지 않았습니다(`license` 필드 없음). 화면·한국어 문구·해석 리포트·
+검증 스크립트는 이 프로젝트에서 작성한 것이며, 개인 연구·참고용 **비상업** 도구로 공개합니다.
 
 ## 배포
 
