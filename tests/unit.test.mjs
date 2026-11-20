@@ -84,6 +84,9 @@ import {
   offsetPrice,
   roundPrice,
   EXTREME_STOP_RATIO,
+  APP_VERSION,
+  VERSION_SHORT,
+  TopBar,
 } from "./.build/lib.mjs";
 
 /* ---------------------------------------------------------------- helpers */
@@ -1982,15 +1985,97 @@ test("v2.2.4 배선: 배너·결과 카드·리포트가 같은 퍼센트 표기
   assert.match(combo, /실제 \{easyTargetMultiple\(cell\.actualR\)\}/);
 });
 
-test("v2.2.5 버전 표기: package.json·배지·푸터·README 가 같은 버전을 가리킨다", () => {
+test("v2.3.0 버전 표기: package.json·version.ts·배지·푸터·README 가 같은 버전을 가리킨다", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-  assert.equal(pkg.version, "2.2.5");
+  assert.equal(pkg.version, APP_VERSION);
+  assert.equal(APP_VERSION, "2.3.0");
+  // 배지는 짧은 v2.3 만 (긴 설명은 title 속성으로)
+  assert.equal(VERSION_SHORT, "2.3");
   const app = readFileSync("src/App.tsx", "utf8");
-  assert.match(app, /v2\.2\.5 · /);
-  assert.match(app, /한국형 타임머신 시뮬레이터 v2\.2\.5/);
+  assert.match(app, /한국형 타임머신 시뮬레이터 v\{APP_VERSION\}/);
+  assert.match(app, /import \{ APP_VERSION \} from "\.\/lib\/version"/);
   const readme = readFileSync("README.md", "utf8");
-  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.2\.5\)/);
+  assert.match(readme, /^# 한국형 타임머신 시뮬레이터 \(v2\.3\.0\)/);
 });
+
+/* ================================================================ v2.3.0 모바일 헤더 복구 · 실시간 검색 제외 */
+
+test("v2.3.0 헤더 ①: 제목은 한 줄(nowrap)이고 배지는 짧은 v2.3 으로 제목과 같은 줄에 있다", async () => {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { TopBar, h } = await import("./.build/lib.mjs");
+  const html = renderToStaticMarkup(h(TopBar, null));
+
+  // 1) 제목 텍스트는 쪼개지지 않은 한 덩어리
+  assert.ok(html.includes("<h1>한국형 타임머신</h1>"), html.slice(0, 400));
+  // 2) 배지는 짧은 v2.3 — v2.2.5 처럼 긴 설명을 붙이지 않는다
+  assert.ok(html.includes(">v2.3</span>"), "배지가 v2.3 이어야 한다");
+  assert.ok(!html.includes("0주 부제"), "긴 버전 설명이 배지에 남아 있으면 모바일에서 제목을 민다");
+  // 3) 배지는 제목과 같은 줄 컨테이너(.brand-title-row) 안에, 제목 뒤에 온다
+  const rowStart = html.indexOf('class="brand-title-row"');
+  const row = html.slice(rowStart, html.indexOf("</h1>") + 5);
+  assert.ok(row.includes("<h1>한국형 타임머신</h1>"), "제목이 title row 안에 없다");
+  assert.ok(html.indexOf("<h1>한국형 타임머신</h1>") < html.indexOf('data-testid="version-badge"'), "배지가 제목보다 먼저 온다");
+  // 4) 헤더는 배지만 따로 오른쪽에 떠 있는 종전 구조(.topbar > .pill)가 아니다
+  assert.ok(!/class="topbar"[^>]*>\s*<span class="pill"/.test(html), "종전 우측 고정 배지 구조가 남아 있다");
+  // 5) 부제는 제목 아래 문단으로 남는다
+  assert.ok(html.includes("내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터"));
+
+  // CSS: 제목은 단어 중간에서 끊기지 않고, 배지는 줄어들지 않으며, 좁으면 줄바꿈만 된다
+  const css = readFileSync("src/styles.css", "utf8");
+  const h1 = css.slice(css.indexOf(".brand h1 {"), css.indexOf(".brand h1 {") + 400);
+  assert.match(h1, /white-space:\s*nowrap/);
+  assert.match(h1, /word-break:\s*keep-all/);
+  const titleRow = css.slice(css.indexOf(".brand-title-row {"), css.indexOf(".brand-title-row {") + 300);
+  assert.match(titleRow, /display:\s*flex/);
+  const pill = css.slice(css.indexOf(".pill {"), css.indexOf(".pill {") + 300);
+  assert.match(pill, /flex:\s*0 0 auto/);
+  assert.match(pill, /white-space:\s*nowrap/);
+  // 모바일(640px 이하)에서도 제목은 17px 로 한 줄, 배지 줄은 넘칠 때만 다음 줄로 감싼다
+  assert.match(css, /\.brand h1 \{\s*font-size: 17px;/);
+  assert.match(css, /\.brand-title-row \{\s*gap: 8px;\s*flex-wrap: wrap;/);
+});
+
+test("v2.3.0 헤더 ②: 제목이 한 줄로 들어가는 폭 계산 — 360px 에서도 7자가 쪼개지지 않는다", () => {
+  // 360px 뷰포트: 앱 좌우 패딩 10px×2, 로고 40px, 로고-텍스트 간격 10px 를 빼면 텍스트 폭 290px
+  const textWidth = 360 - 10 * 2 - 40 - 10;
+  assert.equal(textWidth, 290);
+  // 제목 7자(공백 포함 8자)를 17px 로 그리면 약 119~136px, 배지 v2.3 은 약 48px → 합이 290px 안에 들어온다
+  const titleWidth = 17 * 8; // 한글 자폭 ≈ 글자 크기, 공백 포함
+  const badgeWidth = 12 * 4 + 8 * 2 + 2; // 글자 4개 + 좌우 패딩 + 테두리
+  assert.ok(titleWidth + 8 + badgeWidth < textWidth, `${titleWidth}+${badgeWidth} < ${textWidth}`);
+});
+
+test("v2.3.0 실시간 검색 제외: stock-bars 를 부르는 UI·상태가 앱에서 사라졌다", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  // 화면 배선 제거 — import·상태·핸들러·표시 모두
+  for (const gone of [
+    "StockSearch",
+    "stockApi",
+    "fetchStockBars",
+    "RELAY_OFFLINE_MESSAGE",
+    "StockApiError",
+    "liveState",
+    "liveDataset",
+    "liveWarnings",
+    "loadLive",
+    "relay-note",
+    "서버 토큰 연동 대기",
+  ]) {
+    assert.ok(!app.includes(gone), `App.tsx 에 ${gone} 가 남아 있다`);
+  }
+  // 남은 입력 경로는 내장 종목 + CSV/JSON 뿐
+  assert.ok(app.includes("내장 샘플 종목 · 내 데이터"));
+  assert.ok(app.includes("<option value=\"custom\">내 데이터 직접 입력 (CSV/JSON)</option>"));
+  assert.ok(!app.includes("<option value=\"live\">"));
+  // 개인정보 안내도 실시간 전송 문구를 더 이상 말하지 않는다
+  assert.ok(app.includes("이 앱은 시세\n              서버를 호출하지 않고"));
+  // 다른 화면(리포트·컴포넌트)에서도 stock-bars 호출이 없다
+  for (const f of readdirSync("src/components").map((x) => `src/components/${x}`)) {
+    const text = readFileSync(f, "utf8");
+    assert.ok(!text.includes("supabase.co"), `${f} 가 supabase 를 부른다`);
+  }
+});
+
 
 test("v2.2.4 봇 재현 ②: 진입 100,000 / 손절 99,999 / 목표 100,002 — 표에 1.5배가 아니라 실제 2배로 적힌다", async () => {
   const { renderToStaticMarkup } = await import("react-dom/server");

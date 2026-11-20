@@ -6,7 +6,6 @@ import { historyReplay } from "./lib/backtest";
 import { sizePosition } from "./lib/sizing";
 import { parseCustom } from "./lib/parseCustom";
 import { formatPrice, formatR, mirrorPrice, offsetPrice, roundPrice } from "./lib/format";
-import { fetchStockBars, RELAY_OFFLINE_MESSAGE, StockApiError } from "./lib/stockApi";
 import type { RunResult } from "./lib/run";
 import { FanChart } from "./components/FanChart";
 import { ResultCards } from "./components/ResultCards";
@@ -14,9 +13,9 @@ import { SizingCard, isExtremeStop } from "./components/SizingCard";
 import { EXTREME_BANNER_NOTE, ZERO_SHARES_BANNER_NOTE, avgRTone, pctThree, positiveTone } from "./lib/easy";
 import { BacktestCard } from "./components/BacktestCard";
 import { DataNote } from "./components/DataNote";
-import { StockSearch } from "./components/StockSearch";
-import type { StockPick } from "./components/StockSearch";
 import { ReportView } from "./components/ReportView";
+import { TopBar } from "./components/TopBar";
+import { APP_VERSION } from "./lib/version";
 
 const BASE = import.meta.env.BASE_URL || "/";
 const REPLAYS = 10000;
@@ -36,16 +35,6 @@ export default function App() {
   const [customBusy, setCustomBusy] = useState(false);
   /** [적용하기]를 통과해 실제로 계산에 쓸 수 있는 커스텀 데이터 */
   const [customDataset, setCustomDataset] = useState<Dataset | null>(null);
-
-  const [liveDataset, setLiveDataset] = useState<Dataset | null>(null);
-  const [liveWarnings, setLiveWarnings] = useState<string[]>([]);
-  const [liveState, setLiveState] = useState<{
-    status: "idle" | "loading" | "ready" | "error";
-    message?: string;
-    detail?: string;
-    lastPick?: StockPick;
-  }>({ status: "idle" });
-  const liveAbortRef = useRef<AbortController | null>(null);
 
   const [side, setSide] = useState<Side>("buy");
   const [entry, setEntry] = useState("");
@@ -90,7 +79,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!datasetId || datasetId === "custom" || datasetId === "live") return;
+    if (!datasetId || datasetId === "custom") return;
     let alive = true;
     fetch(`${BASE}samples/${datasetId}.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(datasetId))))
@@ -167,68 +156,8 @@ export default function App() {
       setCustomWarnings(customDataset ? customWarnings : []);
       return;
     }
-    if (next === "live" && liveDataset) {
-      setDataset(liveDataset);
-      setCustomWarnings([]);
-      applyDefaults(liveDataset);
-    }
     setDatasetId(next);
   };
-
-  /* ---------------------------------------------------------------- live */
-  const loadLive = useCallback(
-    async (pick: StockPick) => {
-      liveAbortRef.current?.abort();
-      const ctrl = new AbortController();
-      liveAbortRef.current = ctrl;
-      const label = pick.label ?? pick.symbol;
-      setLiveState({ status: "loading", message: `${label} 5분봉을 불러오는 중…`, lastPick: pick });
-      try {
-        const out = await fetchStockBars(pick, ctrl.signal);
-        if (ctrl.signal.aborted) return;
-        const m = out.dataset.meta;
-        setLiveDataset(out.dataset);
-        setLiveWarnings(out.warnings);
-        setDataset(out.dataset);
-        setDatasetId("live");
-        setCustomWarnings([]);
-        setLoadError(null);
-        applyDefaults(out.dataset);
-        setRun(null);
-        setLiveState({
-          status: "ready",
-          lastPick: pick,
-          message: `${out.dataset.name} (${out.dataset.symbol}) — ${m.sessionsUsed}세션 · ${m.interval} · ${m.firstDate}~${m.lastDate} 불러옴`,
-          detail:
-            out.warnings.length > 0
-              ? out.warnings.join(" ")
-              : [m.source, out.source.range ? `range=${out.source.range}&interval=${out.source.interval}` : ""]
-                  .filter(Boolean)
-                  .join(" · "),
-        });
-      } catch (e) {
-        if (ctrl.signal.aborted || (e instanceof DOMException && e.name === "AbortError")) return;
-        const offline =
-          e instanceof StockApiError && (e.kind === "offline" || e.kind === "timeout");
-        setLiveState({
-          status: "error",
-          lastPick: pick,
-          message: offline
-            ? RELAY_OFFLINE_MESSAGE
-            : e instanceof Error
-              ? e.message
-              : "실시간 데이터를 불러오지 못했습니다.",
-          detail:
-            e instanceof StockApiError && e.kind === "offline"
-              ? "중계 서버(stock-bars)가 아직 배포되지 않았거나 네트워크가 막혀 있습니다. 내장 5종목과 CSV/JSON 입력은 지금도 그대로 작동합니다. 가짜 시세를 대신 보여주지는 않습니다."
-              : undefined,
-        });
-      }
-    },
-    [applyDefaults]
-  );
-
-  useEffect(() => () => liveAbortRef.current?.abort(), []);
 
   /* ---------------------------------------------------------------- run */
   const num = (s: string) => {
@@ -371,18 +300,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="logo" aria-hidden="true">
-            ⏱
-          </span>
-          <div>
-            <h1>한국형 타임머신</h1>
-            <p>내 계획을 1만 번 미리 걸어보는 통계 시뮬레이터</p>
-          </div>
-        </div>
-        <span className="pill">v2.2.5 · 0주 부제·계산용 1원 단위 표기·조합표 버튼 접근성</span>
-      </header>
+      <TopBar />
 
       <div className="disclaimer" role="note" data-testid="top-disclaimer">
         <strong>투자 권유·매수/매도 신호가 아닙니다.</strong> 사용자가 입력한 가격과 과거 봉 데이터 기반의
@@ -426,51 +344,9 @@ export default function App() {
               계획 입력
             </h2>
 
-            <StockSearch onPick={loadLive} busy={liveState.status === "loading"} />
-
-            <div
-              className={`live-status ${liveState.status}`}
-              role="status"
-              aria-live="polite"
-              hidden={liveState.status === "idle"}
-            >
-              {liveState.status !== "idle" && (
-                <>
-                  <p className="live-status-line">
-                    {liveState.status === "loading" && <span className="spinner" aria-hidden="true" />}
-                    {liveState.message}
-                  </p>
-                  {liveState.status === "error" && liveState.detail && (
-                    <p className="live-status-detail">{liveState.detail}</p>
-                  )}
-                  {liveState.status === "ready" && liveState.detail && (
-                    <p className="live-status-detail">{liveState.detail}</p>
-                  )}
-                  {liveState.status === "ready" && liveState.lastPick && (
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={() => liveState.lastPick && loadLive(liveState.lastPick)}
-                    >
-                      최신 시세로 다시 불러오기
-                    </button>
-                  )}
-                  {liveState.status === "error" && liveState.lastPick && (
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={() => liveState.lastPick && loadLive(liveState.lastPick)}
-                    >
-                      다시 시도
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-
             <label className="field">
               <span className="field-label">
-                내장 샘플 · 내 데이터 <span className="muted small">(실시간 없이 바로 사용)</span>
+                내장 샘플 종목 · 내 데이터 <span className="muted small">(로그인·서버 없이 바로 사용)</span>
               </span>
               <select
                 className="control"
@@ -478,11 +354,6 @@ export default function App() {
                 data-testid="dataset-select"
                 onChange={(e) => changeDataset(e.target.value)}
               >
-                {liveDataset && (
-                  <option value="live">
-                    실시간: {liveDataset.name} ({liveDataset.symbol}) · {liveDataset.meta.sessionsUsed}일
-                  </option>
-                )}
                 {sampleOptions.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.symbol}) · {s.sessions}일 · {s.sessionBars}봉
@@ -493,8 +364,8 @@ export default function App() {
             </label>
 
             <p className="privacy-note" data-testid="privacy-note">
-              CSV·JSON 붙여넣기/업로드는 브라우저 안에서만 처리되며 외부로 전송되지 않습니다. 실시간
-              종목 검색 시에만 검색어·종목 코드가 시세 중계 서버로 전달됩니다.
+              CSV·JSON 붙여넣기/업로드는 브라우저 안에서만 처리되며 외부로 전송되지 않습니다. 이 앱은 시세
+              서버를 호출하지 않고, 내장 데이터와 내 파일만으로 계산합니다.
             </p>
 
             {datasetId === "custom" && (
@@ -844,12 +715,7 @@ export default function App() {
               </>
             )}
 
-            {dataset && (
-              <DataNote
-                dataset={dataset}
-                warnings={dataset.live ? liveWarnings : customWarnings}
-              />
-            )}
+            {dataset && <DataNote dataset={dataset} warnings={customWarnings} />}
           </div>
         </main>
       ) : (
@@ -874,7 +740,7 @@ export default function App() {
 
       <footer className="footer">
         <p>
-          한국형 타임머신 시뮬레이터 v2.2.5 · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance·네이버증권 공개
+          한국형 타임머신 시뮬레이터 v{APP_VERSION} · 실제 과거 5분봉 기반 · 데이터: Yahoo Finance 공개
           시세 · 투자 자문 아님
         </p>
         <p>

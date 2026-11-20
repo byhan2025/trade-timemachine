@@ -33,6 +33,10 @@ const EXAMPLES: { label: string; q: string }[] = [
 
 /**
  * 실시간 종목 검색 입력창.
+ *
+ * v2.3.0 — 앱에서 렌더하지 않는다(실시간 검색 화면 제외). 파일은 재사용을 위해 남겨 두었다.
+ * 다시 붙이려면 시세 재배포 약관을 먼저 확인할 것(README 「시세 데이터 약관」).
+ *
  * 검색은 네이버증권·Yahoo 검색을 중계 서버로 조회하고, 결과를 고르면 부모가 봉을 불러온다.
  */
 export function StockSearch({ onPick, busy }: Props) {

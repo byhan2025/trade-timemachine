@@ -90,6 +90,8 @@ export {
   survivalIndexText,
   survivalFlatNote,
 } from "../src/lib/easy";
+export { TopBar } from "../src/components/TopBar";
+export { APP_VERSION, VERSION_SHORT, VERSION_NOTE } from "../src/lib/version";
 export { ResultCards } from "../src/components/ResultCards";
 export { SizingCard, isExtremeStop } from "../src/components/SizingCard";
 export { ComboTable } from "../src/components/ComboTable";

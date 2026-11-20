@@ -1,6 +1,10 @@
 import type { Dataset, DatasetMeta, Session } from "./types";
 
 /**
+ * v2.3.0 — 이 모듈은 **앱에서 import 하지 않는다**(기본 내보내기 이름 그대로 보존).
+ * 실시간 종목 검색을 화면에서 제외했으므로 브라우저가 `stock-bars` 를 호출하는 경로가 없다.
+ * 다시 쓰려면 먼저 시세 재배포 약관을 확인할 것(README 「시세 데이터 약관」).
+ *
  * 실시간 시세 중계(Supabase Edge Function `stock-bars`) 클라이언트.
  * 중계 서버가 아직 배포 전이거나 네트워크가 막히면 가짜 데이터를 만들지 않고
  * 호출한 쪽이 "대기 중" 상태를 보여줄 수 있도록 StockApiError 를 던진다.
