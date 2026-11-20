@@ -21,16 +21,17 @@ function shortTime(value: string): string {
 function basisLine(dataset?: Dataset): string {
   if (!dataset) return "";
   const m = dataset.meta;
+  // v2.3.1 — 가상 체험·내 API 키·내 파일을 공개 시세로 오해하지 않게 출처를 정확히 적는다
   const source = dataset.custom
-    ? "직접 입력 데이터"
-    : /yahoo/i.test(m.source)
-      ? "Yahoo Finance 공개 시세 기준"
-      : /naver/i.test(m.source)
-        ? "네이버증권 공개 시세 기준"
+    ? "내가 올린 데이터 기준"
+    : dataset.live
+      ? "내 API 키로 조회한 시세 기준"
+      : dataset.synthetic
+        ? "가상 생성 통계 예시 기준(실제 시세 아님)"
         : "공개 시세 기준";
   return [
     `기준일 ${m.lastDate}`,
-    `수집 ${shortTime(m.fetchedAt)}`,
+    `${dataset.live ? "조회" : "수집"} ${shortTime(m.fetchedAt)}`,
     `${m.sessionsUsed}세션`,
     m.interval,
     source,
