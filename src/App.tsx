@@ -371,12 +371,13 @@ export default function App() {
   /**
    * v2.3.2 — WAI-ARIA Tabs 키보드 탐색: ArrowLeft/Right(처음↔끝 순환)·Home·End 로
    * 탭을 고르고 포커스를 옮긴다. 선택은 포커스를 따라간다(automatic activation).
+   * 가로 탭 목록(aria-orientation=horizontal)이므로 위/아래 화살표는 쓰지 않는다(APG).
    */
   const onTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     const key = event.key;
     let next: Tab | null = null;
-    if (key === "ArrowRight" || key === "ArrowDown") next = tab === "sim" ? "report" : "sim";
-    else if (key === "ArrowLeft" || key === "ArrowUp") next = tab === "sim" ? "report" : "sim";
+    if (key === "ArrowRight") next = tab === "sim" ? "report" : "sim";
+    else if (key === "ArrowLeft") next = tab === "sim" ? "report" : "sim";
     else if (key === "Home") next = "sim";
     else if (key === "End") next = "report";
     if (!next) return;
